@@ -1513,7 +1513,7 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
 
         int idx = 0;
         // Add GraphicsPipelineDesc information
-        builder[idx++] = pipelineDesc.renderStepID();
+        builder[idx++] = static_cast<uint32_t>(pipelineDesc.renderStepID());
         builder[idx++] = pipelineDesc.paintParamsID().asUInt();
         // Add RenderPass info relevant for pipeline creation that's not captured in RenderPass keys
         builder[idx++] = renderPassDesc.fWriteSwizzle.asKey();
@@ -1526,28 +1526,9 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
     return pipelineKey;
 }
 
-GraphiteResourceKey VulkanCaps::makeSamplerKey(const SamplerDesc& samplerDesc) const {
-    GraphiteResourceKey samplerKey;
-    const SkSpan<const uint32_t>& samplerData = samplerDesc.asSpan();
-    static const ResourceType kSamplerType = GraphiteResourceKey::GenerateResourceType();
-    // Non-format ycbcr and sampler information are guaranteed to fit within one uint32, so the size
-    // of the returned span accurately captures the quantity of uint32s needed whether the sampler
-    // is immutable or not.
-    GraphiteResourceKey::Builder builder(&samplerKey, kSamplerType, samplerData.size(),
-                                         Shareable::kYes);
-
-    for (size_t i = 0; i < samplerData.size(); i++) {
-        builder[i] = samplerData[i];
-    }
-
-    builder.finish();
-    return samplerKey;
-}
-
 void VulkanCaps::buildKeyForTexture(SkISize dimensions,
                                     const TextureInfo& info,
                                     ResourceType type,
-                                    Shareable shareable,
                                     GraphiteResourceKey* key) const {
     SkASSERT(!dimensions.isEmpty());
 
@@ -1577,13 +1558,15 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
 
     // We need two uint32_ts for dimensions, 1 for format, and 2 for the rest of the information.
     static constexpr int kNum32DataCntNoYcbcr =  2 + 1 + 2;
+    // YCbCr conversion needs 1 int for non-format flags, and a 64-bit format (external or regular).
+    static constexpr int kNum32DataCntYcbcr = 3;
     int num32DataCnt = kNum32DataCntNoYcbcr;
 
     // If a texture w/ an external format is being used, that information must also be appended.
     const VulkanYcbcrConversionInfo& ycbcrInfo = TextureInfos::GetVulkanYcbcrConversionInfo(info);
-    num32DataCnt += ycbcrPackaging::numInt32sNeeded(ycbcrInfo);
+    num32DataCnt += ycbcrInfo.isValid() ? kNum32DataCntYcbcr : 0;
 
-    GraphiteResourceKey::Builder builder(key, type, num32DataCnt, shareable);
+    GraphiteResourceKey::Builder builder(key, type, num32DataCnt);
 
     int i = 0;
     builder[i++] = dimensions.width();
@@ -1591,14 +1574,11 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
 
     if (ycbcrInfo.isValid()) {
         SkASSERT(ycbcrInfo.fFormat != VK_FORMAT_UNDEFINED || ycbcrInfo.fExternalFormat != 0);
-        bool useExternalFormat = ycbcrInfo.fFormat == VK_FORMAT_UNDEFINED;
-        builder[i++] = ycbcrPackaging::nonFormatInfoAsUInt32(ycbcrInfo);
-        if (useExternalFormat) {
-            builder[i++] = (uint32_t)ycbcrInfo.fExternalFormat;
-            builder[i++] = (uint32_t)(ycbcrInfo.fExternalFormat >> 32);
-        } else {
-            builder[i++] =  ycbcrInfo.fFormat;
-        }
+        ImmutableSamplerInfo packedInfo = VulkanYcbcrConversion::ToImmutableSamplerInfo(ycbcrInfo);
+
+        builder[i++] = packedInfo.fNonFormatYcbcrConversionInfo;
+        builder[i++] = (uint32_t) packedInfo.fFormat;
+        builder[i++] = (uint32_t) (packedInfo.fFormat >> 32);
     } else {
         builder[i++] = format;
     }
@@ -1620,15 +1600,7 @@ ImmutableSamplerInfo VulkanCaps::getImmutableSamplerInfo(const TextureProxy* pro
                 TextureInfos::GetVulkanYcbcrConversionInfo(proxy->textureInfo());
 
         if (ycbcrConversionInfo.isValid()) {
-            ImmutableSamplerInfo immutableSamplerInfo;
-            // ycbcrConversionInfo's fFormat being VK_FORMAT_UNDEFINED indicates we are using an
-            // external format rather than a known VkFormat.
-            immutableSamplerInfo.fFormat = ycbcrConversionInfo.fFormat == VK_FORMAT_UNDEFINED
-                    ? ycbcrConversionInfo.fExternalFormat
-                    : ycbcrConversionInfo.fFormat;
-            immutableSamplerInfo.fNonFormatYcbcrConversionInfo =
-                    ycbcrPackaging::nonFormatInfoAsUInt32(ycbcrConversionInfo);
-            return immutableSamplerInfo;
+            return VulkanYcbcrConversion::ToImmutableSamplerInfo(ycbcrConversionInfo);
         }
     }
 

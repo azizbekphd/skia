@@ -876,6 +876,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 			"Mac11":       "Mac-11.4",
 			"Mac12":       "Mac-12",
 			"Mac13":       "Mac-13",
+			"Mac14":       "Mac-14.7", // Builds run on 14.5, tests on 14.7.
 			"Mokey":       "Android",
 			"MokeyGo32":   "Android",
 			"Ubuntu18":    "Ubuntu-18.04",
@@ -971,6 +972,7 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 					"MacBookAir7.2":  "x86-64-i5-5350U",
 					"MacBookPro11.5": "x86-64-i7-4870HQ",
 					"MacMini7.1":     "x86-64-i5-4278U",
+					"MacMini8.1":     "x86-64-i7-8700B",
 					"NUC5i7RYH":      "x86-64-i7-5557U",
 					"NUC9i7QN":       "x86-64-i7-9750H",
 					"NUC11TZi5":      "x86-64-i5-1135G7",
@@ -1053,13 +1055,14 @@ func (b *taskBuilder) defaultSwarmDimensions() {
 				}
 			} else if b.matchOs("Mac") {
 				gpu, ok := map[string]string{
-					"AppleM1":       "AppleM1",
-					"AppleM3":       "apple:m3",
-					"IntelHD6000":   "8086:1626",
-					"IntelHD615":    "8086:591e",
-					"IntelIris5100": "8086:0a2e",
-					"IntelIrisPlus": "8086:8a53",
-					"RadeonHD8870M": "1002:6821-4.0.20-3.2.8",
+					"AppleM1":             "AppleM1",
+					"AppleM3":             "apple:m3",
+					"IntelHD6000":         "8086:1626",
+					"IntelHD615":          "8086:591e",
+					"IntelIris5100":       "8086:0a2e",
+					"IntelIrisPlus":       "8086:8a53",
+					"IntelUHDGraphics630": "8086:3e9b",
+					"RadeonHD8870M":       "1002:6821-4.0.20-3.2.8",
 				}[b.parts["cpu_or_gpu_value"]]
 				if !ok {
 					log.Fatalf("Entry %q not found in Mac GPU mapping.", b.parts["cpu_or_gpu_value"])
@@ -1409,7 +1412,7 @@ func (b *jobBuilder) recreateSKPs() {
 		)
 		b.usesGo()
 		b.cache(CACHES_WORKDIR...)
-		b.timeout(6 * time.Hour)
+		b.timeout(8 * time.Hour)
 		b.usesPython()
 		b.attempts(2)
 	})
@@ -2189,6 +2192,7 @@ var shorthandToLabel = map[string]labelAndSavedOutputDir{
 	"use_skresources":            {"//example/external_client:use_skresources", ""},
 	"write_text_to_png":          {"//example/external_client:write_text_to_png", ""},
 	"write_to_pdf":               {"//example/external_client:write_to_pdf", ""},
+	"play_skottie":               {"//example/external_client:play_skottie", ""},
 
 	// Currently there is no way to tell Bazel "only test go_test targets", so we must group them
 	// under a test_suite.

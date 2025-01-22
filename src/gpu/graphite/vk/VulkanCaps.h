@@ -55,8 +55,6 @@ public:
                                       const RenderPassDesc&) const override;
     UniqueKey makeComputePipelineKey(const ComputePipelineDesc&) const override { return {}; }
 
-    GraphiteResourceKey makeSamplerKey(const SamplerDesc&) const override;
-
     uint32_t channelMask(const TextureInfo&) const override;
 
     bool isTexturable(const VulkanTextureInfo&) const;
@@ -68,7 +66,6 @@ public:
     void buildKeyForTexture(SkISize dimensions,
                             const TextureInfo&,
                             ResourceType,
-                            Shareable,
                             GraphiteResourceKey*) const override;
 
     bool shouldAlwaysUseDedicatedImageMemory() const {

@@ -473,9 +473,15 @@ void DawnCaps::initCaps(const DawnBackendContext& backendContext, const ContextO
 #if !defined(__EMSCRIPTEN__)
     // TODO(b/344963958): SSBOs contribute to OOB shader memory access and dawn device loss on
     // Android. Once the problem is fixed SSBOs can be enabled again.
+    // TODO(dawn:388028942): In compat mode, the number of storage buffers in vertex stage could be
+    // zero on some devices. We currently use SSBO in vertex shaders so disabling it entirely in
+    // this case. There is a bug in D3D11's backend where it sets number of SSBOs in vertex shader
+    // to non-zero in compat mode. Once that bug is fixed, and a new limit is used for readonly
+    // SSBOs, we can enable this again.
     fStorageBufferSupport = info.backendType != wgpu::BackendType::OpenGL &&
                             info.backendType != wgpu::BackendType::OpenGLES &&
-                            info.backendType != wgpu::BackendType::Vulkan;
+                            info.backendType != wgpu::BackendType::Vulkan &&
+                            info.compatibilityMode == false;
 #else
     // WASM doesn't provide a way to query the backend, so can't tell if we are on a backend that
     // needs to have SSBOs disabled. Pessimistically assume we could be. Once the above conditions
@@ -1003,7 +1009,7 @@ UniqueKey DawnCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeline
         UniqueKey::Builder builder(&pipelineKey, get_pipeline_domain(),
                                    kDawnGraphicsPipelineKeyData32Count, "DawnGraphicsPipeline");
         // Add GraphicsPipelineDesc key.
-        builder[0] = pipelineDesc.renderStepID();
+        builder[0] = static_cast<uint32_t>(pipelineDesc.renderStepID());
         builder[1] = pipelineDesc.paintParamsID().asUInt();
 
         // Add RenderPassDesc key and write swizzle (which is separate from the RenderPassDescKey
@@ -1026,8 +1032,11 @@ bool DawnCaps::extractGraphicsDescs(const UniqueKey& key,
 
     const uint32_t* rawKeyData = key.data();
 
-    const RenderStep* renderStep = rendererProvider->lookup(rawKeyData[0]);
-    *pipelineDesc = GraphicsPipelineDesc(renderStep, UniquePaintParamsID(rawKeyData[1]));
+    SkASSERT(RenderStep::IsValidRenderStepID(rawKeyData[0]));
+    RenderStep::RenderStepID renderStepID = static_cast<RenderStep::RenderStepID>(rawKeyData[0]);
+
+    SkDEBUGCODE(const RenderStep* renderStep = rendererProvider->lookup(renderStepID);)
+    *pipelineDesc = GraphicsPipelineDesc(renderStepID, UniquePaintParamsID(rawKeyData[1]));
     SkASSERT(renderStep->performsShading() == pipelineDesc->paintParamsID().isValid());
 
     uint32_t renderpassDescBits = rawKeyData[2];
@@ -1099,54 +1108,14 @@ UniqueKey DawnCaps::makeComputePipelineKey(const ComputePipelineDesc& pipelineDe
     return pipelineKey;
 }
 
-#if !defined(__EMSCRIPTEN__)
-namespace {
-using namespace ycbcrUtils;
-
-uint32_t non_format_info_as_uint32(const wgpu::YCbCrVkDescriptor& desc) {
-    static_assert(kComponentAShift + kComponentBits <= 32);
-    SkASSERT(desc.vkYCbCrModel                          < (1u << kYcbcrModelBits    ));
-    SkASSERT(desc.vkYCbCrRange                          < (1u << kYcbcrRangeBits    ));
-    SkASSERT(desc.vkXChromaOffset                       < (1u << kXChromaOffsetBits ));
-    SkASSERT(desc.vkYChromaOffset                       < (1u << kYChromaOffsetBits ));
-    SkASSERT(static_cast<uint32_t>(desc.vkChromaFilter) < (1u << kChromaFilterBits  ));
-    SkASSERT(desc.vkComponentSwizzleRed                 < (1u << kComponentBits     ));
-    SkASSERT(desc.vkComponentSwizzleGreen               < (1u << kComponentBits     ));
-    SkASSERT(desc.vkComponentSwizzleBlue                < (1u << kComponentBits     ));
-    SkASSERT(desc.vkComponentSwizzleAlpha               < (1u << kComponentBits     ));
-    SkASSERT(static_cast<uint32_t>(desc.forceExplicitReconstruction)
-             < (1u << kForceExplicitReconBits));
-
-    return (((uint32_t)(DawnDescriptorUsesExternalFormat(desc)) << kUsesExternalFormatShift) |
-            ((uint32_t)(desc.vkYCbCrModel                     ) << kYcbcrModelShift        ) |
-            ((uint32_t)(desc.vkYCbCrRange                     ) << kYcbcrRangeShift        ) |
-            ((uint32_t)(desc.vkXChromaOffset                  ) << kXChromaOffsetShift     ) |
-            ((uint32_t)(desc.vkYChromaOffset                  ) << kYChromaOffsetShift     ) |
-            ((uint32_t)(desc.vkChromaFilter                   ) << kChromaFilterShift      ) |
-            ((uint32_t)(desc.forceExplicitReconstruction      ) << kForceExplicitReconShift) |
-            ((uint32_t)(desc.vkComponentSwizzleRed            ) << kComponentRShift        ) |
-            ((uint32_t)(desc.vkComponentSwizzleGreen          ) << kComponentGShift        ) |
-            ((uint32_t)(desc.vkComponentSwizzleBlue           ) << kComponentBShift        ) |
-            ((uint32_t)(desc.vkComponentSwizzleAlpha          ) << kComponentAShift        ));
-}
-} // anonymous
-#endif
-
 ImmutableSamplerInfo DawnCaps::getImmutableSamplerInfo(const TextureProxy* proxy) const {
 #if !defined(__EMSCRIPTEN__)
     if (proxy) {
         const wgpu::YCbCrVkDescriptor& ycbcrConversionInfo =
                 TextureInfos::GetDawnTextureSpec(proxy->textureInfo()).fYcbcrVkDescriptor;
 
-        if (ycbcrUtils::DawnDescriptorIsValid(ycbcrConversionInfo)) {
-            ImmutableSamplerInfo immutableSamplerInfo;
-            // A vkFormat of 0 indicates we are using an external format rather than a known one.
-            immutableSamplerInfo.fFormat = (ycbcrConversionInfo.vkFormat == 0)
-                    ? ycbcrConversionInfo.externalFormat
-                    : ycbcrConversionInfo.vkFormat;
-            immutableSamplerInfo.fNonFormatYcbcrConversionInfo =
-                    non_format_info_as_uint32(ycbcrConversionInfo);
-            return immutableSamplerInfo;
+        if (DawnDescriptorIsValid(ycbcrConversionInfo)) {
+            return DawnDescriptorToImmutableSamplerInfo(ycbcrConversionInfo);
         }
     }
 #endif
@@ -1159,7 +1128,6 @@ ImmutableSamplerInfo DawnCaps::getImmutableSamplerInfo(const TextureProxy* proxy
 void DawnCaps::buildKeyForTexture(SkISize dimensions,
                                   const TextureInfo& info,
                                   ResourceType type,
-                                  Shareable shareable,
                                   GraphiteResourceKey* key) const {
     const DawnTextureSpec dawnSpec = TextureInfos::GetDawnTextureSpec(info);
 
@@ -1184,13 +1152,11 @@ void DawnCaps::buildKeyForTexture(SkISize dimensions,
     bool hasYcbcrInfo = false;
 #if !defined(__EMSCRIPTEN__)
     // If we are using ycbcr texture/sampling, more key information is needed.
-    if ((hasYcbcrInfo = ycbcrUtils::DawnDescriptorIsValid(dawnSpec.fYcbcrVkDescriptor))) {
-        num32DataCnt += ycbcrUtils::DawnDescriptorUsesExternalFormat(dawnSpec.fYcbcrVkDescriptor)
-                ? SamplerDesc::kInt32sNeededExternalFormat
-                : SamplerDesc::kInt32sNeededKnownFormat;
+    if ((hasYcbcrInfo = DawnDescriptorIsValid(dawnSpec.fYcbcrVkDescriptor))) {
+        num32DataCnt += 3; // non-format flags and 64-bit format
     }
 #endif
-    GraphiteResourceKey::Builder builder(key, type, num32DataCnt, shareable);
+    GraphiteResourceKey::Builder builder(key, type, num32DataCnt);
 
     builder[0] = dimensions.width();
     builder[1] = dimensions.height();
@@ -1201,35 +1167,16 @@ void DawnCaps::buildKeyForTexture(SkISize dimensions,
 
 #if !defined(__EMSCRIPTEN__)
     if (hasYcbcrInfo) {
-        builder[4] = non_format_info_as_uint32(dawnSpec.fYcbcrVkDescriptor);
+        ImmutableSamplerInfo packedInfo =
+                DawnDescriptorToImmutableSamplerInfo(dawnSpec.fYcbcrVkDescriptor);
+        builder[4] = packedInfo.fNonFormatYcbcrConversionInfo;
         // Even though we already have formatKey appended to the texture key, we still need to add
         // fYcbcrVkDescriptor's vkFormat or externalFormat. The latter two are distinct from
         // dawnSpec's wgpu::TextureFormat.
-        if (!ycbcrUtils::DawnDescriptorUsesExternalFormat(dawnSpec.fYcbcrVkDescriptor)) {
-            builder[5] = dawnSpec.fYcbcrVkDescriptor.vkFormat;
-        } else {
-            builder[5] = (uint32_t)(dawnSpec.fYcbcrVkDescriptor.externalFormat >> 32);
-            builder[6] = (uint32_t)dawnSpec.fYcbcrVkDescriptor.externalFormat;
-        }
+        builder[5] = (uint32_t) packedInfo.fFormat;
+        builder[6] = (uint32_t) (packedInfo.fFormat >> 32);
     }
 #endif
-}
-
-GraphiteResourceKey DawnCaps::makeSamplerKey(const SamplerDesc& samplerDesc) const {
-    GraphiteResourceKey samplerKey;
-    const SkSpan<const uint32_t>& samplerData = samplerDesc.asSpan();
-    static const ResourceType kSamplerType = GraphiteResourceKey::GenerateResourceType();
-    // Non-format ycbcr and sampler information are guaranteed to fit within one uint32, so the size
-    // of the returned span accurately captures the quantity of uint32s needed whether the sampler
-    // is immutable or not.
-    GraphiteResourceKey::Builder builder(&samplerKey, kSamplerType, samplerData.size(),
-                                         Shareable::kYes);
-
-    for (size_t i = 0; i < samplerData.size(); i++) {
-        builder[i] = samplerData[i];
-    }
-    builder.finish();
-    return samplerKey;
 }
 
 } // namespace skgpu::graphite
