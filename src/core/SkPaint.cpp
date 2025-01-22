@@ -43,6 +43,7 @@ SkPaint::SkPaint()
                  (unsigned)false,                   // fDither
                  (unsigned)SkPaint::kDefault_Cap,   // fCapType
                  (unsigned)SkPaint::kDefault_Join,  // fJoinType
+                 (unsigned)SkPaint::kDefault_Align, // fAlignType
                  (unsigned)SkPaint::kFill_Style,    // fStyle
                  0}                                 // fPadding
 {
@@ -192,6 +193,16 @@ void SkPaint::setStrokeJoin(Join jt) {
     } else {
 #ifdef SK_REPORT_API_RANGE_CHECK
         SkDebugf("SkPaint::setStrokeJoin(%d) out of range\n", jt);
+#endif
+    }
+}
+
+void SkPaint::setStrokeAlign(Align at) {
+    if ((unsigned)at < kAlignCount) {
+        fBitfields.fAlignType = SkToU8(at);
+    } else {
+#ifdef SK_REPORT_API_RANGE_CHECK
+        SkDebugf("SkPaint::setStrokeAlign(%d) out of range\n", at);
 #endif
     }
 }

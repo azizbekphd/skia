@@ -367,6 +367,19 @@ public:
     */
     static constexpr int kJoinCount = kLast_Join + 1;
 
+    enum Align: uint8_t {
+        kInner_Align,
+        kMiddle_Align,
+        kOuter_Align,
+        kLast_Align    = kOuter_Align,
+        kDefault_Align = kMiddle_Align,
+    };
+
+    static constexpr int kAlignCount = kLast_Align + 1;
+
+    Align getStrokeAlign() const { return (Align)fBitfields.fAlignType; }
+    void setStrokeAlign(Align align);
+
     /** Returns the geometry drawn at the beginning and end of strokes.
     */
     Cap getStrokeCap() const { return (Cap)fBitfields.fCapType; }
@@ -674,8 +687,9 @@ private:
             unsigned    fDither : 1;
             unsigned    fCapType : 2;
             unsigned    fJoinType : 2;
+            unsigned    fAlignType : 2;
             unsigned    fStyle : 2;
-            unsigned    fPadding : 24;  // 24 == 32 -1-1-2-2-2
+            unsigned    fPadding : 22;  // 22 == 32 -1-1-2-2-2-2
         } fBitfields;
         uint32_t fBitfieldsUInt;
     };

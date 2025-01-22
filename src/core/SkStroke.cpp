@@ -168,7 +168,7 @@ class SkPathStroker {
 public:
     SkPathStroker(const SkPath& src,
                   SkScalar radius, SkScalar miterLimit, SkPaint::Cap,
-                  SkPaint::Join, SkScalar resScale,
+                  SkPaint::Join, SkPaint::Align, SkScalar resScale,
                   bool canIgnoreCenter);
 
     bool hasOnlyMoveTo() const { return 0 == fSegmentCount; }
@@ -208,8 +208,9 @@ private:
     bool        fPrevIsLine;
     bool        fCanIgnoreCenter;
 
-    SkStrokerPriv::CapProc  fCapper;
-    SkStrokerPriv::JoinProc fJoiner;
+    SkStrokerPriv::CapProc   fCapper;
+    SkStrokerPriv::JoinProc  fJoiner;
+    SkStrokerPriv::AlignProc fAligner;
 
     SkPath  fInner, fOuter, fCusper; // outer is our working answer, inner is temp
 
@@ -381,8 +382,8 @@ void SkPathStroker::finishContour(bool close, bool currIsLine) {
 
 SkPathStroker::SkPathStroker(const SkPath& src,
                              SkScalar radius, SkScalar miterLimit,
-                             SkPaint::Cap cap, SkPaint::Join join, SkScalar resScale,
-                             bool canIgnoreCenter)
+                             SkPaint::Cap cap, SkPaint::Join join, SkPaint::Align align,
+                             SkScalar resScale, bool canIgnoreCenter)
         : fRadius(radius)
         , fResScale(resScale)
         , fCanIgnoreCenter(canIgnoreCenter) {
@@ -401,6 +402,7 @@ SkPathStroker::SkPathStroker(const SkPath& src,
     }
     fCapper = SkStrokerPriv::CapFactory(cap);
     fJoiner = SkStrokerPriv::JoinFactory(join);
+    fAligner = SkStrokerPriv::AlignFactory(align);
     fSegmentCount = -1;
     fFirstOuterPtIndexInContour = 0;
     fPrevIsLine = false;
@@ -481,7 +483,11 @@ void SkPathStroker::lineTo(const SkPoint& currPt, const SkPath::Iter* iter) {
     if (!this->preJoinTo(currPt, &normal, &unitNormal, true)) {
         return;
     }
-    this->line_to(currPt, normal);
+    if (fAligner) {
+        fAligner(&fOuter, &fInner, fPrevPt, currPt, normal, fRadius);
+    } else {
+        this->line_to(currPt, normal);
+    }
     this->postJoinTo(currPt, normal, unitNormal);
 }
 
@@ -1371,6 +1377,7 @@ SkStroke::SkStroke() {
     fResScale   = 1;
     fCap        = SkPaint::kDefault_Cap;
     fJoin       = SkPaint::kDefault_Join;
+    fAlign      = SkPaint::kDefault_Align;
     fDoFill     = false;
 }
 
@@ -1380,6 +1387,7 @@ SkStroke::SkStroke(const SkPaint& p) {
     fResScale   = 1;
     fCap        = (uint8_t)p.getStrokeCap();
     fJoin       = (uint8_t)p.getStrokeJoin();
+    fAlign      = (uint8_t)p.getStrokeAlign();
     fDoFill     = SkToU8(p.getStyle() == SkPaint::kStrokeAndFill_Style);
 }
 
@@ -1389,6 +1397,7 @@ SkStroke::SkStroke(const SkPaint& p, SkScalar width) {
     fResScale   = 1;
     fCap        = (uint8_t)p.getStrokeCap();
     fJoin       = (uint8_t)p.getStrokeJoin();
+    fAlign      = (uint8_t)p.getStrokeAlign();
     fDoFill     = SkToU8(p.getStyle() == SkPaint::kStrokeAndFill_Style);
 }
 
@@ -1410,6 +1419,11 @@ void SkStroke::setCap(SkPaint::Cap cap) {
 void SkStroke::setJoin(SkPaint::Join join) {
     SkASSERT((unsigned)join < SkPaint::kJoinCount);
     fJoin = SkToU8(join);
+}
+
+void SkStroke::setAlign(SkPaint::Align align) {
+    SkASSERT((unsigned)align < SkPaint::kAlignCount);
+    fAlign = SkToU8(align);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1472,7 +1486,8 @@ void SkStroke::strokePath(const SkPath& src, SkPath* dst) const {
     bool ignoreCenter = fDoFill && (src.getSegmentMasks() == SkPath::kLine_SegmentMask) &&
                         src.isLastContourClosed() && src.isConvex();
 
-    SkPathStroker   stroker(src, radius, fMiterLimit, this->getCap(), this->getJoin(),
+    SkPathStroker   stroker(src, radius, fMiterLimit,
+                            this->getCap(), this->getJoin(), this->getAlign(),
                             fResScale, ignoreCenter);
     SkPath::Iter    iter(src, false);
     SkPath::Verb    lastSegment = SkPath::kMove_Verb;

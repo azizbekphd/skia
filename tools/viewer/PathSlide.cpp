@@ -291,7 +291,7 @@ DEF_SLIDE( return new ArcToSlide; )
 
 class FatStrokeSlide : public ClickHandlerSlide {
     bool fClosed, fShowStroke, fShowHidden, fShowSkeleton, fAsCurves = false;
-    int  fJoinType, fCapType;
+    int  fJoinType, fCapType, fAlignType;
     float fWidth = 30;
     SkPaint fPtsPaint, fHiddenPaint, fSkeletonPaint, fStrokePaint;
 
@@ -307,7 +307,8 @@ public:
             , fShowHidden(false)
             , fShowSkeleton(true)
             , fJoinType(0)
-            , fCapType(0) {
+            , fCapType(0)
+            , fAlignType(0) {
         SkRandom rand;
         for (int i = 0; i < N; ++i) {
             fPts[i].fX = 20 + rand.nextUScalar1() * 640;
@@ -358,6 +359,7 @@ public:
         fStrokePaint.setStrokeWidth(fWidth);
         fStrokePaint.setStrokeJoin((SkPaint::Join)fJoinType);
         fStrokePaint.setStrokeCap((SkPaint::Cap)fCapType);
+        fStrokePaint.setStrokeAlign((SkPaint::Align)fAlignType);
 
         if (fShowStroke) {
             canvas->drawPath(path, fStrokePaint);

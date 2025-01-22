@@ -45,6 +45,9 @@ public:
     SkPaint::Join getJoin() const { return (SkPaint::Join)fJoin; }
     void          setJoin(SkPaint::Join);
 
+    SkPaint::Align getAlign() const { return (SkPaint::Align)fAlign; }
+    void          setAlign(SkPaint::Align);
+
     void    setMiterLimit(SkScalar);
     void    setWidth(SkScalar);
 
@@ -77,7 +80,7 @@ public:
 private:
     SkScalar    fWidth, fMiterLimit;
     SkScalar    fResScale;
-    uint8_t     fCap, fJoin;
+    uint8_t     fCap, fJoin, fAlign;
     bool        fDoFill;
 
     friend class SkPaint;

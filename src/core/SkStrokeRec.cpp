@@ -21,6 +21,7 @@ SkStrokeRec::SkStrokeRec(InitStyle s) {
     fMiterLimit     = SkPaintDefaults_MiterLimit;
     fCap            = SkPaint::kDefault_Cap;
     fJoin           = SkPaint::kDefault_Join;
+    fAlign          = SkPaint::kDefault_Align;
     fStrokeAndFill  = false;
 }
 
@@ -66,6 +67,7 @@ void SkStrokeRec::init(const SkPaint& paint, SkPaint::Style style, SkScalar resS
     fMiterLimit = paint.getStrokeMiter();
     fCap        = paint.getStrokeCap();
     fJoin       = paint.getStrokeJoin();
+    fAlign      = paint.getStrokeAlign();
 }
 
 SkStrokeRec::Style SkStrokeRec::getStyle() const {
@@ -112,6 +114,7 @@ bool SkStrokeRec::applyToPath(SkPath* dst, const SkPath& src) const {
     SkStroke stroker;
     stroker.setCap((SkPaint::Cap)fCap);
     stroker.setJoin((SkPaint::Join)fJoin);
+    stroker.setAlign((SkPaint::Align)fAlign);
     stroker.setMiterLimit(fMiterLimit);
     stroker.setWidth(fWidth);
     stroker.setDoFill(fStrokeAndFill);
@@ -135,6 +138,7 @@ void SkStrokeRec::applyToPaint(SkPaint* paint) const {
     paint->setStrokeMiter(fMiterLimit);
     paint->setStrokeCap((SkPaint::Cap)fCap);
     paint->setStrokeJoin((SkPaint::Join)fJoin);
+    paint->setStrokeAlign((SkPaint::Align)fAlign);
 }
 
 SkScalar SkStrokeRec::getInflationRadius() const {

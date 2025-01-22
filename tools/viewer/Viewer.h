@@ -127,6 +127,7 @@ public:
 
         bool fCapType = false;
         bool fJoinType = false;
+        bool fAlignType = false;
         bool fStyle = false;
     };
     struct SkSurfacePropsFields {

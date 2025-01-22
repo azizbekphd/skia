@@ -59,6 +59,7 @@
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
+#include "include/docs/SkPDFDocument.h"
 #include "include/private/base/SkOnce.h"
 #include "include/utils/SkParsePath.h"
 #include "include/utils/SkShadowUtils.h"
@@ -71,6 +72,7 @@
 #include <emscripten.h>
 #include <emscripten/bind.h>
 #include <emscripten/html5.h>
+#include <vector>
 
 #if defined(CK_ENABLE_WEBGL) || defined(CK_ENABLE_WEBGPU)
 #define ENABLE_GPU
@@ -795,6 +797,7 @@ struct StrokeOpts {
     SkScalar miter_limit;
     SkPaint::Join join;
     SkPaint::Cap cap;
+    SkPaint::Align align;
     float precision;
 };
 
@@ -803,6 +806,7 @@ bool ApplyStroke(SkPath& path, StrokeOpts opts) {
     p.setStyle(SkPaint::kStroke_Style);
     p.setStrokeCap(opts.cap);
     p.setStrokeJoin(opts.join);
+    p.setStrokeAlign(opts.align);
     p.setStrokeWidth(opts.width);
     p.setStrokeMiter(opts.miter_limit);
 
@@ -1047,7 +1051,79 @@ static Uint8Array encodeImage(GrDirectContext* dContext,
     return toBytes(data);
 }
 
+class SkWStreamWrapper : public SkWStream {
+public:
+    std::vector<uint8_t> buffer;
+
+    bool write(const void* data, size_t size) override {
+        const uint8_t* bytes = static_cast<const uint8_t*>(data);
+        buffer.insert(buffer.end(), bytes, bytes + size);
+        return true;
+    }
+
+    void flush() override {
+        // No action needed for memory buffer
+    }
+
+    size_t bytesWritten() const override {
+        return buffer.size();
+    }
+
+    emscripten::val getBuffer() {
+        return emscripten::val(emscripten::typed_memory_view(buffer.size(), buffer.data()));
+    }
+};
+
+class SkPDFDocumentWrapper {
+private:
+    sk_sp<SkDocument> pdfDoc;
+    SkWStreamWrapper* stream;
+
+public:
+    SkPDFDocumentWrapper(SkWStreamWrapper* stream) : stream(stream) {
+        pdfDoc = SkPDF::MakeDocument(stream);
+        if (!pdfDoc) {
+            SkDebugf("Failed to create SkPDFDocument\n");
+        }
+    }
+
+    ~SkPDFDocumentWrapper() {
+        if (pdfDoc) {
+            pdfDoc->close();
+        }
+    }
+
+    SkCanvas* beginPage(float width, float height) {
+        if (!pdfDoc) return nullptr;
+        return pdfDoc->beginPage(width, height);
+    }
+
+    void endPage() {
+        if (pdfDoc) {
+            pdfDoc->endPage();
+        }
+    }
+
+    void close() {
+        if (pdfDoc) {
+            pdfDoc->close();
+            pdfDoc.reset();
+        }
+    }
+};
+
 EMSCRIPTEN_BINDINGS(Skia) {
+    class_<SkWStreamWrapper>("WStream")
+        .constructor<>()
+        .function("flush", &SkWStreamWrapper::flush)
+        .function("getBuffer", &SkWStreamWrapper::getBuffer);
+
+    class_<SkPDFDocumentWrapper>("PDFDocument")
+        .constructor<SkWStreamWrapper*>()
+        .function("beginPage", &SkPDFDocumentWrapper::beginPage, emscripten::allow_raw_pointers())
+        .function("endPage", &SkPDFDocumentWrapper::endPage)
+        .function("close", &SkPDFDocumentWrapper::close);
+
 #ifdef ENABLE_GPU
     constant("gpu", true);
     function("_MakeGrContext", &MakeGrContext);
@@ -1846,6 +1922,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         }))
         .function("getStrokeCap", &SkPaint::getStrokeCap)
         .function("getStrokeJoin", &SkPaint::getStrokeJoin)
+        .function("getStrokeAlign", &SkPaint::getStrokeAlign)
         .function("getStrokeMiter", &SkPaint::getStrokeMiter)
         .function("getStrokeWidth", &SkPaint::getStrokeWidth)
         .function("setAntiAlias", &SkPaint::setAntiAlias)
@@ -1871,6 +1948,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("setShader", &SkPaint::setShader)
         .function("setStrokeCap", &SkPaint::setStrokeCap)
         .function("setStrokeJoin", &SkPaint::setStrokeJoin)
+        .function("setStrokeAlign", &SkPaint::setStrokeAlign)
         .function("setStrokeMiter", &SkPaint::setStrokeMiter)
         .function("setStrokeWidth", &SkPaint::setStrokeWidth)
         .function("setStyle", &SkPaint::setStyle);
@@ -2652,6 +2730,11 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .value("Round", SkPaint::Join::kRound_Join)
         .value("Bevel", SkPaint::Join::kBevel_Join);
 
+    enum_<SkPaint::Align>("StrokeAlign")
+        .value("Inner",  SkPaint::Align::kInner_Align)
+        .value("Middle", SkPaint::Align::kMiddle_Align)
+        .value("Outer",  SkPaint::Align::kOuter_Align);
+
 #ifndef CK_NO_FONTS
     enum_<SkFontHinting>("FontHinting")
         .value("None",   SkFontHinting::kNone)
@@ -2694,6 +2777,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .field("miter_limit", &StrokeOpts::miter_limit)
         .field("join",        &StrokeOpts::join)
         .field("cap",         &StrokeOpts::cap)
+        .field("align",       &StrokeOpts::align)
         .field("precision",   &StrokeOpts::precision);
 
     constant("MOVE_VERB",  MOVE);
@@ -2714,3 +2798,4 @@ EMSCRIPTEN_BINDINGS(Skia) {
     constant("_GlyphRunFlags_isWhiteSpace", (int)skia::textlayout::Paragraph::kWhiteSpace_VisitorFlag);
 #endif
 }
+

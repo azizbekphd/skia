@@ -46,7 +46,7 @@ mkdir -p $BUILD_DIR
 # we get a fresh build.
 rm -f $BUILD_DIR/*.a
 
-GN_GPU="skia_enable_ganesh=true skia_gl_standard = \"webgl\""
+GN_GPU="skia_enable_ganesh=false skia_gl_standard = \"webgl\""
 GN_GPU_FLAGS="\"-DSK_DISABLE_LEGACY_SHADERCONTEXT\","
 WASM_GPU="-lGL -DSK_GANESH -DSK_GL -DCK_ENABLE_WEBGL \
           -DSK_DISABLE_LEGACY_SHADERCONTEXT --pre-js $BASE_DIR/cpu.js --pre-js $BASE_DIR/webgl.js\
@@ -121,7 +121,7 @@ echo "Compiling bitcode"
   skia_enable_svg=true \
   skia_enable_skshaper=true \
   skia_enable_skparagraph=true \
-  skia_enable_pdf=false"
+  skia_enable_pdf=true"
 
 # Build all the libs we will need below
 parse_targets() {

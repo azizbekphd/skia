@@ -43,6 +43,7 @@ public:
     SkScalar getMiter() const { return fMiterLimit; }
     SkPaint::Cap getCap() const { return (SkPaint::Cap)fCap; }
     SkPaint::Join getJoin() const { return (SkPaint::Join)fJoin; }
+    SkPaint::Align getAlign() const { return (SkPaint::Align)fAlign; }
 
     bool isHairlineStyle() const {
         return kHairline_Style == this->getStyle();
@@ -144,6 +145,7 @@ private:
     SkScalar        fResScale;
     SkScalar        fWidth;
     SkScalar        fMiterLimit;
+    SkScalar        fAlign;
     // The following three members are packed together into a single u32.
     // This is to avoid unnecessary padding and ensure binary equality for
     // hashing (because the padded areas might contain garbage values).
