@@ -168,7 +168,7 @@ class SkPathStroker {
 public:
     SkPathStroker(const SkPath& src,
                   SkScalar radius, SkScalar miterLimit, SkPaint::Cap,
-                  SkPaint::Join, SkPaint::Align, SkScalar resScale,
+                  SkPaint::Join, SkPaint::Align align, SkScalar resScale,
                   bool canIgnoreCenter);
 
     bool hasOnlyMoveTo() const { return 0 == fSegmentCount; }
@@ -213,6 +213,7 @@ private:
     SkStrokerPriv::AlignProc fAligner;
 
     SkPath  fInner, fOuter, fCusper; // outer is our working answer, inner is temp
+    SkPaint::Align fAlign;
 
     enum StrokeType {
         kOuter_StrokeType = 1,      // use sign-opposite values later to flip perpendicular axis
@@ -317,7 +318,7 @@ bool SkPathStroker::preJoinTo(const SkPoint& currPt, SkVector* normal,
         fInner.moveTo(fPrevPt - *normal);
     } else {    // we have a previous segment
         fJoiner(&fOuter, &fInner, fPrevUnitNormal, fPrevPt, *unitNormal,
-                fRadius, fInvMiterLimit, fPrevIsLine, currIsLine);
+                fRadius, fInvMiterLimit, fPrevIsLine, currIsLine, fAlign);
     }
     fPrevIsLine = currIsLine;
     return true;
@@ -339,7 +340,7 @@ void SkPathStroker::finishContour(bool close, bool currIsLine) {
         if (close) {
             fJoiner(&fOuter, &fInner, fPrevUnitNormal, fPrevPt,
                     fFirstUnitNormal, fRadius, fInvMiterLimit,
-                    fPrevIsLine, currIsLine);
+                    fPrevIsLine, currIsLine, fAlign);
             fOuter.close();
 
             if (fCanIgnoreCenter) {
@@ -386,7 +387,8 @@ SkPathStroker::SkPathStroker(const SkPath& src,
                              SkScalar resScale, bool canIgnoreCenter)
         : fRadius(radius)
         , fResScale(resScale)
-        , fCanIgnoreCenter(canIgnoreCenter) {
+        , fCanIgnoreCenter(canIgnoreCenter)
+        , fAlign(align) {
 
     /*  This is only used when join is miter_join, but we initialize it here
         so that it is always defined, to fis valgrind warnings.
