@@ -210,7 +210,6 @@ private:
 
     SkStrokerPriv::CapProc   fCapper;
     SkStrokerPriv::JoinProc  fJoiner;
-    SkStrokerPriv::AlignProc fAligner;
 
     SkPath  fInner, fOuter, fCusper; // outer is our working answer, inner is temp
     SkPaint::Align fAlign;
@@ -318,7 +317,7 @@ bool SkPathStroker::preJoinTo(const SkPoint& currPt, SkVector* normal,
         fInner.moveTo(fPrevPt - *normal);
     } else {    // we have a previous segment
         fJoiner(&fOuter, &fInner, fPrevUnitNormal, fPrevPt, *unitNormal,
-                fRadius, fInvMiterLimit, fPrevIsLine, currIsLine, fAlign);
+                fRadius, fInvMiterLimit, fPrevIsLine, currIsLine);
     }
     fPrevIsLine = currIsLine;
     return true;
@@ -340,7 +339,7 @@ void SkPathStroker::finishContour(bool close, bool currIsLine) {
         if (close) {
             fJoiner(&fOuter, &fInner, fPrevUnitNormal, fPrevPt,
                     fFirstUnitNormal, fRadius, fInvMiterLimit,
-                    fPrevIsLine, currIsLine, fAlign);
+                    fPrevIsLine, currIsLine);
             fOuter.close();
 
             if (fCanIgnoreCenter) {
@@ -404,7 +403,6 @@ SkPathStroker::SkPathStroker(const SkPath& src,
     }
     fCapper = SkStrokerPriv::CapFactory(cap);
     fJoiner = SkStrokerPriv::JoinFactory(join);
-    fAligner = SkStrokerPriv::AlignFactory(align);
     fSegmentCount = -1;
     fFirstOuterPtIndexInContour = 0;
     fPrevIsLine = false;
@@ -485,11 +483,8 @@ void SkPathStroker::lineTo(const SkPoint& currPt, const SkPath::Iter* iter) {
     if (!this->preJoinTo(currPt, &normal, &unitNormal, true)) {
         return;
     }
-    if (fAligner) {
-        fAligner(&fOuter, &fInner, fPrevPt, currPt, normal, fRadius);
-    } else {
-        this->line_to(currPt, normal);
-    }
+
+    this->line_to(currPt, normal);
     this->postJoinTo(currPt, normal, unitNormal);
 }
 
@@ -1456,12 +1451,25 @@ private:
     bool            fSwapWithSrc;
 };
 
-void SkStroke::strokePath(const SkPath& src, SkPath* dst) const {
+void SkStroke::strokePath(const SkPath& preSrc, SkPath* dst) const {
     SkASSERT(dst);
 
     SkScalar radius = SkScalarHalf(fWidth);
 
-    AutoTmpPath tmp(src, &dst);
+    AutoTmpPath tmp(preSrc, &dst);
+
+    SkPath src;
+    switch (fAlign) {
+        case SkPaint::kMiddle_Align:
+            src = preSrc;
+            break;
+        case SkPaint::kInner_Align:
+            preSrc.shiftVertices(-radius, &src);
+            break;
+        case SkPaint::kOuter_Align:
+            preSrc.shiftVertices(radius, &src);
+            break;
+    }
 
     if (radius <= 0) {
         return;

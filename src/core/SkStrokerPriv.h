@@ -38,18 +38,10 @@ public:
                              const SkPoint& pivot,
                              const SkVector& afterUnitNormal,
                              SkScalar radius, SkScalar invMiterLimit,
-                             bool prevIsLine, bool currIsLine,
-                             SkPaint::Align align);
-
-    typedef void (*AlignProc)(SkPath* outer, SkPath* inner,
-                              const SkPoint& pivot,
-                              const SkPoint& stop,
-                              const SkVector& normal,
-                              SkScalar radius);
+                             bool prevIsLine, bool currIsLine);
 
     static CapProc   CapFactory(SkPaint::Cap);
     static JoinProc  JoinFactory(SkPaint::Join);
-    static AlignProc AlignFactory(SkPaint::Align);
 };
 
 #endif

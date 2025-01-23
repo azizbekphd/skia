@@ -6,7 +6,10 @@
  */
 
 #include "include/core/SkPath.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPathUtils.h"
 
+#include "include/core/SkScalar.h"
 #include "include/core/SkArc.h"
 #include "include/core/SkPathBuilder.h"
 #include "include/core/SkRRect.h"
@@ -19,6 +22,7 @@
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTDArray.h"
 #include "include/private/base/SkTo.h"
+#include "include/pathops/SkPathOps.h"
 #include "src/base/SkFloatBits.h"
 #include "src/base/SkTLazy.h"
 #include "src/base/SkVx.h"
@@ -3966,4 +3970,32 @@ SkPathEdgeIter::SkPathEdgeIter(const SkPath& path) {
     fNeedsCloseLine = false;
     fNextIsNewContour = false;
     SkDEBUGCODE(fIsConic = false;)
+}
+
+void SkPath::shiftVertices(SkScalar offset, SkPath* dst) const {
+    SkASSERT(dst);
+
+    static SkPaint paint;
+    static bool isInitialized = false;
+    static SkPath strokePath;
+
+    if (!isInitialized) {
+        paint.setAntiAlias(true);
+        paint.setStyle(SkPaint::kStroke_Style);
+        isInitialized = true;
+    }
+
+    paint.setStrokeWidth(abs(offset) * 2);
+
+    skpathutils::FillPathWithPaint(*this, paint, &strokePath);
+
+    if (offset > 0) {
+        Op(*this, strokePath, SkPathOp::kUnion_SkPathOp, dst);
+    } else if (offset < 0) {
+        Op(strokePath, *this, SkPathOp::kReverseDifference_SkPathOp, dst);
+    } else {
+        *dst = strokePath;
+    }
+
+    strokePath.reset();
 }

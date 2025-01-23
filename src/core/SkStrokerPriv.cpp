@@ -87,8 +87,7 @@ static void BluntJoiner(SkPath* outer, SkPath* inner,
                         const SkVector& beforeUnitNormal,
                         const SkPoint& pivot,
                         const SkVector& afterUnitNormal,
-                        SkScalar radius, SkScalar invMiterLimit,
-                        bool, bool) {
+                        SkScalar radius, SkScalar invMiterLimit, bool, bool) {
     SkVector    after;
     afterUnitNormal.scale(radius, &after);
 
@@ -221,46 +220,6 @@ DO_BLUNT:
 
 /////////////////////////////////////////////////////////////////////////////
 
-static void InnerAligner(SkPath* outer, SkPath* inner,
-                         const SkPoint& pivot, const SkPoint& stop,
-                         const SkVector& normal, SkScalar radius) {
-    SkPoint outerP1 = pivot;
-    SkPoint outerP2 = stop;
-    outer->lineTo(outerP1.fX, outerP1.fY);
-    outer->lineTo(outerP2.fX, outerP2.fY);
-
-    SkPoint innerP1 = pivot - normal * 2;
-    SkPoint innerP2 = stop - normal * 2;
-    inner->lineTo(innerP1.fX, innerP1.fY);
-    inner->lineTo(innerP2.fX, innerP2.fY);
-}
-
-static void MiddleAligner(SkPath* outer, SkPath* inner,
-                          const SkPoint& pivot, const SkPoint& stop,
-                          const SkVector& normal, SkScalar radius) {
-    SkPoint outerP = stop + normal;
-    SkPoint innerP = stop - normal;
-
-    outer->lineTo(outerP);
-    inner->lineTo(innerP);
-}
-
-static void OuterAligner(SkPath* outer, SkPath* inner,
-                         const SkPoint& pivot, const SkPoint& stop,
-                         const SkVector& normal, SkScalar radius) {
-    SkPoint outerP1 = pivot + normal * 2;
-    SkPoint outerP2 = stop + normal * 2;
-    outer->lineTo(outerP1);
-    outer->lineTo(outerP2);
-
-    SkPoint innerP1 = pivot;
-    SkPoint innerP2 = stop;
-    inner->lineTo(innerP1);
-    inner->lineTo(innerP2);
-}
-
-/////////////////////////////////////////////////////////////////////////////
-
 SkStrokerPriv::CapProc SkStrokerPriv::CapFactory(SkPaint::Cap cap) {
     const SkStrokerPriv::CapProc gCappers[] = {
         ButtCapper, RoundCapper, SquareCapper
@@ -277,13 +236,4 @@ SkStrokerPriv::JoinProc SkStrokerPriv::JoinFactory(SkPaint::Join join) {
 
     SkASSERT((unsigned)join < SkPaint::kJoinCount);
     return gJoiners[join];
-}
-
-SkStrokerPriv::AlignProc SkStrokerPriv::AlignFactory(SkPaint::Align align) {
-    const SkStrokerPriv::AlignProc gAligners[] = {
-        InnerAligner, MiddleAligner, OuterAligner
-    };
-
-    SkASSERT((unsigned)align < SkPaint::kAlignCount);
-    return gAligners[align];
 }

@@ -236,6 +236,10 @@ public:
         fFillType = SkToU8(ft);
     }
 
+    /** Moves all vertices inwards or outwards by a given offset
+    */
+    void shiftVertices(SkScalar offset, SkPath* dst) const;
+
     /** Returns if FillType describes area outside SkPath geometry. The inverse fill area
         extends indefinitely.
 
