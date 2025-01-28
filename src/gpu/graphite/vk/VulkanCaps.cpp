@@ -461,6 +461,10 @@ void VulkanCaps::initFormatTable(const skgpu::VulkanInterface* interface,
 
     std::fill_n(fColorTypeToFormatTable, kSkColorTypeCnt, VK_FORMAT_UNDEFINED);
 
+    // NOTE: VkFormat's naming convention orders channels from low address to high address when
+    // interpreting unpacked formats. For packed formats, the channels are ordered most significant
+    // to least significant (making them opposite of the unpacked).
+
     // Go through all the formats and init their support surface and data ColorTypes.
     // Format: VK_FORMAT_R8G8B8A8_UNORM
     {
@@ -722,6 +726,11 @@ void VulkanCaps::initFormatTable(const skgpu::VulkanInterface* interface,
                 ctInfo.fColorType = ct;
                 ctInfo.fTransferColorType = ct;
                 ctInfo.fFlags = ColorTypeInfo::kUploadData_Flag | ColorTypeInfo::kRenderable_Flag;
+                // The color type is misnamed and really stores ABGR data, but there is no
+                // SkColorType that matches this actual ARGB VkFormat data. Swapping R and B when
+                // rendering into it has it match the reported transfer color type, but we have to
+                // swap R and B when sampling as well. This only works so long as we don't present
+                // textures of this format to a screen that would not know about this swap.
                 ctInfo.fReadSwizzle = skgpu::Swizzle::BGRA();
                 ctInfo.fWriteSwizzle = skgpu::Swizzle::BGRA();
             }
@@ -937,7 +946,7 @@ void VulkanCaps::initFormatTable(const skgpu::VulkanInterface* interface,
             info.fColorTypeInfoCount = 1;
             info.fColorTypeInfos = std::make_unique<ColorTypeInfo[]>(info.fColorTypeInfoCount);
             int ctIdx = 0;
-            // Format: VK_FORMAT_BC1_RGBA_UNORM_BLOCK, Surface: kRGB_888x
+            // Format: VK_FORMAT_BC1_RGBA_UNORM_BLOCK, Surface: kRGBA_8888
             {
                 constexpr SkColorType ct = SkColorType::kRGBA_8888_SkColorType;
                 auto& ctInfo = info.fColorTypeInfos[ctIdx++];
@@ -1594,18 +1603,16 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
     SkASSERT(i == num32DataCnt);
 }
 
-ImmutableSamplerInfo VulkanCaps::getImmutableSamplerInfo(const TextureProxy* proxy) const {
-    if (proxy) {
-        const skgpu::VulkanYcbcrConversionInfo& ycbcrConversionInfo =
-                TextureInfos::GetVulkanYcbcrConversionInfo(proxy->textureInfo());
+ImmutableSamplerInfo VulkanCaps::getImmutableSamplerInfo(const TextureInfo& textureInfo) const {
+    const skgpu::VulkanYcbcrConversionInfo& ycbcrConversionInfo =
+            TextureInfos::GetVulkanYcbcrConversionInfo(textureInfo);
 
-        if (ycbcrConversionInfo.isValid()) {
-            return VulkanYcbcrConversion::ToImmutableSamplerInfo(ycbcrConversionInfo);
-        }
+    if (ycbcrConversionInfo.isValid()) {
+        return VulkanYcbcrConversion::ToImmutableSamplerInfo(ycbcrConversionInfo);
     }
 
-    // If the proxy is null or the YCbCr conversion for that proxy is invalid, then return a
-    // default ImmutableSamplerInfo struct.
+    // If the YCbCr conversion for the TextureInfo is invalid, then return a default
+    // ImmutableSamplerInfo struct.
     return {};
 }
 
