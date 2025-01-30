@@ -788,22 +788,22 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
 
     value_object<SimpleFontStyle>("FontStyle")
         .field("slant",     &SimpleFontStyle::slant)
-        .field("weight",    &SimpleFontStyle::weight)
-        .field("width",     &SimpleFontStyle::width);
+        .field("weight",    &SimpleFontStyle::weight);
+        // .field("width",     &SimpleFontStyle::width);
 
     value_object<SimpleParagraphStyle>("ParagraphStyle")
-        .field("disableHinting",       &SimpleParagraphStyle::disableHinting)
-        .field("_ellipsisPtr",         &SimpleParagraphStyle::ellipsisPtr)
-        .field("_ellipsisLen",         &SimpleParagraphStyle::ellipsisLen)
-        .field("heightMultiplier",     &SimpleParagraphStyle::heightMultiplier)
-        .field("maxLines",             &SimpleParagraphStyle::maxLines)
-        .field("replaceTabCharacters", &SimpleParagraphStyle::replaceTabCharacters)
+        // .field("disableHinting",       &SimpleParagraphStyle::disableHinting)
+        // .field("_ellipsisPtr",         &SimpleParagraphStyle::ellipsisPtr)
+        // .field("_ellipsisLen",         &SimpleParagraphStyle::ellipsisLen)
+        // .field("heightMultiplier",     &SimpleParagraphStyle::heightMultiplier)
+        // .field("maxLines",             &SimpleParagraphStyle::maxLines)
+        // .field("replaceTabCharacters", &SimpleParagraphStyle::replaceTabCharacters)
+        // .field("textHeightBehavior",   &SimpleParagraphStyle::textHeightBehavior)
+        // .field("strutStyle",           &SimpleParagraphStyle::strutStyle)
+        // .field("applyRoundingHack",    &SimpleParagraphStyle::applyRoundingHack);
         .field("textAlign",            &SimpleParagraphStyle::textAlign)
         .field("textDirection",        &SimpleParagraphStyle::textDirection)
-        .field("textHeightBehavior",   &SimpleParagraphStyle::textHeightBehavior)
-        .field("textStyle",            &SimpleParagraphStyle::textStyle)
-        .field("strutStyle",           &SimpleParagraphStyle::strutStyle)
-        .field("applyRoundingHack",    &SimpleParagraphStyle::applyRoundingHack);
+        .field("textStyle",            &SimpleParagraphStyle::textStyle);
 
     value_object<SimpleStrutStyle>("StrutStyle")
         .field("_fontFamiliesPtr", &SimpleStrutStyle::fontFamiliesPtr)
@@ -817,33 +817,33 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .field("forceStrutHeight", &SimpleStrutStyle::forceStrutHeight);
 
     value_object<SimpleTextStyle>("TextStyle")
-        .field("_colorPtr",             &SimpleTextStyle::colorPtr)
-        .field("_foregroundColorPtr",   &SimpleTextStyle::foregroundColorPtr)
-        .field("_backgroundColorPtr",   &SimpleTextStyle::backgroundColorPtr)
-        .field("decoration",            &SimpleTextStyle::decoration)
-        .field("decorationThickness",   &SimpleTextStyle::decorationThickness)
-        .field("_decorationColorPtr",   &SimpleTextStyle::decorationColorPtr)
-        .field("decorationStyle",       &SimpleTextStyle::decorationStyle)
-        .field("_fontFamiliesPtr",      &SimpleTextStyle::fontFamiliesPtr)
-        .field("_fontFamiliesLen",      &SimpleTextStyle::fontFamiliesLen)
-        .field("fontSize",              &SimpleTextStyle::fontSize)
-        .field("letterSpacing",         &SimpleTextStyle::letterSpacing)
-        .field("wordSpacing",           &SimpleTextStyle::wordSpacing)
-        .field("heightMultiplier",      &SimpleTextStyle::heightMultiplier)
-        .field("halfLeading",           &SimpleTextStyle::halfLeading)
-        .field("_localePtr",            &SimpleTextStyle::localePtr)
-        .field("_localeLen",            &SimpleTextStyle::localeLen)
-        .field("fontStyle",             &SimpleTextStyle::fontStyle)
-        .field("_shadowLen",            &SimpleTextStyle::shadowLen)
-        .field("_shadowColorsPtr",      &SimpleTextStyle::shadowColorsPtr)
-        .field("_shadowOffsetsPtr",     &SimpleTextStyle::shadowOffsetsPtr)
-        .field("_shadowBlurRadiiPtr",   &SimpleTextStyle::shadowBlurRadiiPtr)
-        .field("_fontFeatureLen",       &SimpleTextStyle::fontFeatureLen)
-        .field("_fontFeatureNamesPtr",  &SimpleTextStyle::fontFeatureNamesPtr)
-        .field("_fontFeatureValuesPtr", &SimpleTextStyle::fontFeatureValuesPtr)
-        .field("_fontVariationLen",     &SimpleTextStyle::fontVariationLen)
-        .field("_fontVariationAxesPtr", &SimpleTextStyle::fontVariationAxesPtr)
-        .field("_fontVariationValuesPtr", &SimpleTextStyle::fontVariationValuesPtr);
+        // .field("_shadowLen",              &SimpleTextStyle::shadowLen)
+        // .field("_shadowColorsPtr",        &SimpleTextStyle::shadowColorsPtr)
+        // .field("_shadowOffsetsPtr",       &SimpleTextStyle::shadowOffsetsPtr)
+        // .field("_shadowBlurRadiiPtr",     &SimpleTextStyle::shadowBlurRadiiPtr)
+        // .field("_fontFeatureLen",         &SimpleTextStyle::fontFeatureLen)
+        // .field("_fontFeatureNamesPtr",    &SimpleTextStyle::fontFeatureNamesPtr)
+        // .field("_fontFeatureValuesPtr",   &SimpleTextStyle::fontFeatureValuesPtr)
+        // .field("_fontVariationLen",       &SimpleTextStyle::fontVariationLen)
+        // .field("_fontVariationAxesPtr",   &SimpleTextStyle::fontVariationAxesPtr)
+        // .field("_fontVariationValuesPtr", &SimpleTextStyle::fontVariationValuesPtr);
+        // .field("_foregroundColorPtr",     &SimpleTextStyle::foregroundColorPtr)
+        // .field("_backgroundColorPtr",     &SimpleTextStyle::backgroundColorPtr)
+        // .field("decorationThickness",     &SimpleTextStyle::decorationThickness)
+        // .field("_decorationColorPtr",     &SimpleTextStyle::decorationColorPtr)
+        // .field("decorationStyle",         &SimpleTextStyle::decorationStyle)
+        // .field("_fontFamiliesPtr",        &SimpleTextStyle::fontFamiliesPtr)
+        // .field("_fontFamiliesLen",        &SimpleTextStyle::fontFamiliesLen)
+        // .field("letterSpacing",           &SimpleTextStyle::letterSpacing)
+        // .field("wordSpacing",             &SimpleTextStyle::wordSpacing)
+        // .field("heightMultiplier",        &SimpleTextStyle::heightMultiplier)
+        // .field("halfLeading",             &SimpleTextStyle::halfLeading)
+        // .field("_localePtr",              &SimpleTextStyle::localePtr)
+        // .field("_localeLen",              &SimpleTextStyle::localeLen)
+        .field("_colorPtr",               &SimpleTextStyle::colorPtr)
+        .field("decoration",              &SimpleTextStyle::decoration)
+        .field("fontSize",                &SimpleTextStyle::fontSize)
+        .field("fontStyle",               &SimpleTextStyle::fontStyle);
 
     // The U stands for unsigned - we can't bind a generic/template object, so we have to specify it
     // with the type we are using.

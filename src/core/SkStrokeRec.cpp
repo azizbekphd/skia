@@ -6,6 +6,7 @@
  */
 
 #include "include/core/SkStrokeRec.h"
+#include "include/core/SkPath.h"
 
 #include "src/core/SkPaintDefaults.h"
 #include "src/core/SkStroke.h"
@@ -123,7 +124,22 @@ bool SkStrokeRec::applyToPath(SkPath* dst, const SkPath& src) const {
 #else
     stroker.setResScale(fResScale);
 #endif
-    stroker.strokePath(src, dst);
+
+    SkPath adjustedSrc;
+    SkScalar radius = SkScalarHalf(fWidth);
+    switch (fAlign) {
+        case SkPaint::kMiddle_Align:
+            adjustedSrc = src;
+            break;
+        case SkPaint::kInner_Align:
+            src.shiftVertices(-radius, &adjustedSrc);
+            break;
+        case SkPaint::kOuter_Align:
+            src.shiftVertices(radius, &adjustedSrc);
+            break;
+    }
+
+    stroker.strokePath(adjustedSrc, dst);
     return true;
 }
 

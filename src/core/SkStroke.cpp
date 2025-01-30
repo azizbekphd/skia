@@ -1451,25 +1451,12 @@ private:
     bool            fSwapWithSrc;
 };
 
-void SkStroke::strokePath(const SkPath& preSrc, SkPath* dst) const {
+void SkStroke::strokePath(const SkPath& src, SkPath* dst) const {
     SkASSERT(dst);
 
     SkScalar radius = SkScalarHalf(fWidth);
 
-    AutoTmpPath tmp(preSrc, &dst);
-
-    SkPath src;
-    switch (fAlign) {
-        case SkPaint::kMiddle_Align:
-            src = preSrc;
-            break;
-        case SkPaint::kInner_Align:
-            preSrc.shiftVertices(-radius, &src);
-            break;
-        case SkPaint::kOuter_Align:
-            preSrc.shiftVertices(radius, &src);
-            break;
-    }
+    AutoTmpPath tmp(src, &dst);
 
     if (radius <= 0) {
         return;
