@@ -480,6 +480,8 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 					if b.extraConfig("TSAN") {
 						// b/389706939 - Dawn/Metal reports a data race for LazyClearCountForTesting w/ TSAN
 						skip(ALL, "test", ALL, "ThreadedPipelineCompilePurgingTest")
+						// The TSAN_Graphite_Dawn_Metal job seems to consistently get stuck on this unit test
+						skip(ALL, "test", ALL, "BigImageTest_Graphite")
 					}
 				}
 			} else if b.extraConfig("Native") {
@@ -1413,11 +1415,6 @@ func (b *taskBuilder) dmFlags(internalHardwareLabel string) {
 		match = append(match, "~^WritePixelsNonTextureMSAA_Gpu$")
 		match = append(match, "~^WritePixels_Gpu$")
 		match = append(match, "~^WritePixelsMSAA_Gpu$")
-	}
-
-	if b.extraConfig("Vulkan") && b.gpu("GTX660") && b.matchOs("Win") {
-		// skbug.com/8047
-		match = append(match, "~FloatingPointTextureTest$")
 	}
 
 	if b.extraConfig("Metal") && !b.extraConfig("Graphite") && b.gpu("RadeonHD8870M") && b.matchOs("Mac") {
