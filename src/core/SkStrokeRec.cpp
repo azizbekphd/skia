@@ -124,22 +124,7 @@ bool SkStrokeRec::applyToPath(SkPath* dst, const SkPath& src) const {
 #else
     stroker.setResScale(fResScale);
 #endif
-
-    SkPath adjustedSrc;
-    SkScalar radius = SkScalarHalf(fWidth);
-    switch (fAlign) {
-        case SkPaint::kMiddle_Align:
-            adjustedSrc = src;
-            break;
-        case SkPaint::kInner_Align:
-            src.shiftVertices(-radius, &adjustedSrc);
-            break;
-        case SkPaint::kOuter_Align:
-            src.shiftVertices(radius, &adjustedSrc);
-            break;
-    }
-
-    stroker.strokePath(adjustedSrc, dst);
+    stroker.strokePath(src, dst);
     return true;
 }
 
