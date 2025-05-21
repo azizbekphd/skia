@@ -12,7 +12,14 @@
 #include "src/gpu/graphite/ComputePipeline.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipeline.h"
+#include "src/gpu/graphite/GraphicsPipelineDesc.h"
+#include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/Resource.h"
+#include "src/gpu/graphite/SharedContext.h"
+
+#if defined(SK_ENABLE_PRECOMPILE)
+#include "src/gpu/graphite/precompile/SerializationUtils.h"
+#endif
 
 namespace {
 
@@ -40,7 +47,7 @@ constexpr int kGlobalComputePipelineCacheSizeLimit = 256;
 namespace skgpu::graphite {
 
 GlobalCache::GlobalCache()
-        : fGraphicsPipelineCache(kGlobalGraphicsPipelineCacheSizeLimit)
+        : fGraphicsPipelineCache(kGlobalGraphicsPipelineCacheSizeLimit, &fStats)
         , fComputePipelineCache(kGlobalComputePipelineCacheSizeLimit) {}
 
 GlobalCache::~GlobalCache() {
@@ -51,6 +58,65 @@ GlobalCache::~GlobalCache() {
     SkASSERT(fStaticResource.empty());
 }
 
+void GlobalCache::setPipelineCallback(PipelineCallback callback, PipelineCallbackContext context) {
+    SkAutoSpinlock lock{fSpinLock};
+
+    fPipelineCallback = callback;
+    fPipelineCallbackContext = context;
+}
+
+void GlobalCache::invokePipelineCallback(SharedContext* sharedContext,
+                                         const GraphicsPipelineDesc& pipelineDesc,
+                                         const RenderPassDesc& renderPassDesc) {
+#if defined(SK_ENABLE_PRECOMPILE)
+    PipelineCallback tmpCB = nullptr;
+    PipelineCallbackContext tmpContext = nullptr;
+
+    {
+        // We want to get a consistent callback/context pair but not invoke the callback
+        // w/in our lock.
+        SkAutoSpinlock lock{fSpinLock};
+
+        tmpCB = fPipelineCallback;
+        tmpContext = fPipelineCallbackContext;
+    }
+
+    if (tmpCB) {
+        sk_sp<SkData> data = PipelineDescToData(sharedContext->shaderCodeDictionary(),
+                                                pipelineDesc,
+                                                renderPassDesc);
+
+        // Enable this to thoroughly test Pipeline serialization
+#if 0
+        {
+            // Check that the PipelineDesc round trips through serialization
+            GraphicsPipelineDesc readBackPipelineDesc;
+            RenderPassDesc readBackRenderPassDesc;
+
+            SkAssertResult(DataToPipelineDesc(sharedContext->caps(),
+                                              sharedContext->shaderCodeDictionary(),
+                                              data.get(),
+                                              &readBackPipelineDesc,
+                                              &readBackRenderPassDesc));
+
+            DumpPipelineDesc("invokeCallback - original", sharedContext->shaderCodeDictionary(),
+                             pipelineDesc, renderPassDesc);
+
+            DumpPipelineDesc("invokeCallback - readback", sharedContext->shaderCodeDictionary(),
+                  readBackPipelineDesc, readBackRenderPassDesc);
+
+            SkASSERT(ComparePipelineDescs(pipelineDesc, renderPassDesc,
+                                          readBackPipelineDesc, readBackRenderPassDesc));
+        }
+#endif
+
+        if (data) {
+            tmpCB(tmpContext, std::move(data));
+        }
+    }
+#endif
+}
+
 void GlobalCache::deleteResources() {
     SkAutoSpinlock lock{ fSpinLock };
 
@@ -59,7 +125,13 @@ void GlobalCache::deleteResources() {
     fStaticResource.clear();
 }
 
-void GlobalCache::LogPurge(const UniqueKey& key, sk_sp<GraphicsPipeline>* p) {
+void GlobalCache::LogPurge(void* context, const UniqueKey& key, sk_sp<GraphicsPipeline>* p) {
+    PipelineStats* stats = static_cast<PipelineStats*>(context);
+
+    if ((*p)->fromPrecompile() && !(*p)->wasUsed()) {
+        ++stats->fPurgedUnusedPrecompiledPipelines;
+    }
+
 #if defined(SK_PIPELINE_LIFETIME_LOGGING)
     // A "Bad" Purge is one where the Pipeline was never retrieved from the Cache (i.e., unused
     // overgeneration).
@@ -89,6 +161,14 @@ sk_sp<GraphicsPipeline> GlobalCache::findGraphicsPipeline(
 #if defined(GPU_TEST_UTILS)
         ++fStats.fGraphicsCacheHits;
 #endif
+
+        if ((*entry)->epoch() != fEpochCounter) {
+            (*entry)->markEpoch(fEpochCounter);   // update epoch due to use in a new epoch
+            ++fStats.fPipelineUsesInEpoch;
+        }
+        if (!forPrecompile && (*entry)->fromPrecompile() && !(*entry)->wasUsed()) {
+            ++fStats.fNormalPreemptedByPrecompile;
+        }
 
         (*entry)->updateAccessTime();
         (*entry)->markUsed();
@@ -164,6 +244,14 @@ sk_sp<GraphicsPipeline> GlobalCache::addGraphicsPipeline(const UniqueKey& key,
         ++fStats.fGraphicsCacheAdditions;
 #endif
 
+        SkASSERT((*entry)->epoch() == 0);
+        (*entry)->markEpoch(fEpochCounter);      // mark w/ epoch in which it was created
+        ++fStats.fPipelineUsesInEpoch;
+
+        if ((*entry)->fromPrecompile()) {
+            ++fStats.fUnpreemptedPrecompilePipelines;
+        }
+
         // Precompile Pipelines are only marked as used when they get a cache hit in
         // findGraphicsPipeline
         if (!(*entry)->fromPrecompile()) {
@@ -203,15 +291,35 @@ sk_sp<GraphicsPipeline> GlobalCache::addGraphicsPipeline(const UniqueKey& key,
                              "compilationID", pipeline->getPipelineInfo().fCompilationID);
 #endif
 
-#if SK_HISTOGRAMS_ENABLED
         SK_HISTOGRAM_ENUMERATION("Graphite.PipelineCreationRace",
                                  race,
                                  kPipelineCreationRaceCount);
-#endif
     }
     return *entry;
 }
 
+void GlobalCache::removeGraphicsPipeline(const GraphicsPipeline* pipeline) {
+    SkAutoSpinlock lock{fSpinLock};
+
+    skia_private::STArray<1, skgpu::UniqueKey> toRemove;
+    // This is only called when a pipeline failed to compile, so it is not performance critical.
+    fGraphicsPipelineCache.foreach([&toRemove, pipeline](const UniqueKey* key,
+                                                         const sk_sp<GraphicsPipeline>* inCache) {
+        // Since inCache is ref'ed by GlobalCache, we can safely compare direct addresses and not
+        // worry about a new GraphicsPipeline being allocated at an address that was still here.
+        if ((*inCache).get() == pipeline) {
+            toRemove.push_back(*key);
+        }
+    });
+
+    // The pipeline shouldn't have multiple unique keys, but this is structured to clean up every
+    // occurrence of pipeline in fGraphicsPipelineCache in release builds.
+    SkASSERT(toRemove.size() <= 1);
+
+    for (const skgpu::UniqueKey& k : toRemove) {
+        fGraphicsPipelineCache.remove(k);
+    }
+}
 
 void GlobalCache::purgePipelinesNotUsedSince(StdSteadyClock::time_point purgeTime) {
     SkAutoSpinlock lock{fSpinLock};
@@ -237,6 +345,62 @@ void GlobalCache::purgePipelinesNotUsedSince(StdSteadyClock::time_point purgeTim
     // TODO: add purging of Compute Pipelines (b/389073204)
 }
 
+void GlobalCache::reportPrecompileStats() {
+    SkAutoSpinlock lock{fSpinLock};
+
+    uint32_t numUnusedInCache = 0;
+
+    fGraphicsPipelineCache.foreach([&numUnusedInCache](const UniqueKey* key,
+                                                       const sk_sp<GraphicsPipeline>* pipeline) {
+        if (!(*pipeline)->wasUsed()) {
+            SkASSERT((*pipeline)->fromPrecompile());
+            ++numUnusedInCache;
+        }
+    });
+
+    // From local testing we expect these UMA stats to comfortably fit in the specified ranges.
+    // If we see a lot of the counts hitting the over and under-flow buckets something
+    // unexpected is happening and we would need to figure it out and, possibly, create
+    // new UMA statistics for the observed range.
+    SK_HISTOGRAM_CUSTOM_EXACT_LINEAR("Graphite.Precompile.NormalPreemptedByPrecompile",
+                                     fStats.fNormalPreemptedByPrecompile,
+                                     /* countMin= */ 1,
+                                     /* countMax= */ 51,
+                                     /* bucketCount= */ 52);
+    SK_HISTOGRAM_CUSTOM_EXACT_LINEAR("Graphite.Precompile.UnpreemptedPrecompilePipelines",
+                                     fStats.fUnpreemptedPrecompilePipelines,
+                                     /* countMin= */ 100,
+                                     /* countMax= */ 150,
+                                     /* bucketCount= */ 52);
+    SK_HISTOGRAM_CUSTOM_EXACT_LINEAR("Graphite.Precompile.UnusedPrecompiledPipelines",
+                                     fStats.fPurgedUnusedPrecompiledPipelines + numUnusedInCache,
+                                     /* countMin= */ 50,
+                                     /* countMax= */ 100,
+                                     /* bucketCount= */ 52);
+}
+
+void GlobalCache::reportCacheStats() {
+    SkAutoSpinlock lock{fSpinLock};
+
+    SK_HISTOGRAM_CUSTOM_EXACT_LINEAR("Graphite.PipelineCache.PipelineUsesInEpoch",
+                                     fStats.fPipelineUsesInEpoch,
+                                     /* countMin= */ 1,
+                                     /* countMax= */ 1001,
+                                     /* bucketCount= */ 102); // 10/bucket
+
+    // Set up for a new epoch
+    fStats.fPipelineUsesInEpoch = 0;
+    ++fEpochCounter;
+    if (!fEpochCounter) {
+        // The epoch counter has wrapped around - this should be *very* rare. Reset the cache.
+        fGraphicsPipelineCache.foreach([](const UniqueKey* key,
+                                          const sk_sp<GraphicsPipeline>* pipeline) {
+            (*pipeline)->markEpoch(0);
+        });
+        fEpochCounter = 1;
+    }
+}
+
 #if defined(GPU_TEST_UTILS)
 int GlobalCache::numGraphicsPipelines() const {
     SkAutoSpinlock lock{fSpinLock};
@@ -259,12 +423,26 @@ void GlobalCache::forEachGraphicsPipeline(
     });
 }
 
+uint16_t GlobalCache::getEpoch() const {
+    SkAutoSpinlock lock{fSpinLock};
+
+    return fEpochCounter;
+}
+
+// The next reportCacheStats call after this will overflow
+void GlobalCache::forceNextEpochOverflow() {
+    SkAutoSpinlock lock{fSpinLock};
+
+    fEpochCounter = std::numeric_limits<uint16_t>::max();
+}
+
+#endif // defined(GPU_TEST_UTILS)
+
 GlobalCache::PipelineStats GlobalCache::getStats() const {
     SkAutoSpinlock lock{fSpinLock};
 
     return fStats;
 }
-#endif // defined(GPU_TEST_UTILS)
 
 sk_sp<ComputePipeline> GlobalCache::findComputePipeline(const UniqueKey& key) {
     SkAutoSpinlock lock{fSpinLock};

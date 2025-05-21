@@ -53,6 +53,17 @@ mergeinclude() {
   git add "${FT_BUILD_DIR}/${SKIA_INCLUDE}"
 }
 
+update_bazel_patch() {
+  STEP="Update Bazel patch" &&
+  python3 tools/generate_patches.py \
+    ${FT_BUILD_DIR}/include/freetype-android/freetype/config/ftmodule.h builds/android-ftmodule.h \
+    ${FT_BUILD_DIR}/include/freetype-android/freetype/config/ftoption.h builds/android-ftoption.h \
+    ${FT_BUILD_DIR}/include/freetype-no-type1/freetype/config/ftmodule.h builds/no-type1-ftmodule.h \
+    ${FT_BUILD_DIR}/include/freetype-no-type1/freetype/config/ftoption.h builds/no-type1-ftoption.h \
+    > bazel/external/freetype/config_files.patch &&
+  git add bazel/external/freetype/config_files.patch
+}
+
 commit() {
   STEP="commit" &&
   FT_PREVIOUS_REV_SHORT=$(echo "${FT_PREVIOUS_REV}" | cut -c 1-8) &&
@@ -75,5 +86,6 @@ mergeinclude freetype-android freetype/config/ftoption.h &&
 mergeinclude freetype-android freetype/config/ftmodule.h &&
 mergeinclude freetype-no-type1 freetype/config/ftoption.h &&
 mergeinclude freetype-no-type1 freetype/config/ftmodule.h &&
+update_bazel_patch &&
 commit &&
 true || { echo "Failed step ${STEP}"; exit 1; }

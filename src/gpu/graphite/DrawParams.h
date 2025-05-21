@@ -15,7 +15,7 @@
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/geom/NonMSAAClip.h"
 #include "src/gpu/graphite/geom/Rect.h"
-#include "src/gpu/graphite/geom/Transform_graphite.h"
+#include "src/gpu/graphite/geom/Transform.h"
 
 #include <optional>
 
@@ -97,6 +97,8 @@ public:
     const SkShader* shader() const { return fShader; }
 
     bool isClippedOut() const { return fDrawBounds.isEmptyNegativeOrNaN(); }
+
+    bool needsCoverage() const { return SkToBool(fShader) || !fNonMSAAClip.isEmpty(); }
 
 private:
     // DrawList assumes the DrawBounds are correct for a given shape, transform, and style. They

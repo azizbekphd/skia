@@ -54,16 +54,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/codec:png_codec_base_srcs",
 			},
 		},
-		// TODO(https://crbug.com/381900683): Replace this with more granular lists
-		// (with `skia_codec_png_base` + `skia_codec_libpng_srcs`).
-		{Var: "skia_codec_png",
-			Rules: []string{
-				"//src/codec:buffet_libpng_srcs",
-				"//src/codec:common_libpng_srcs",
-				"//src/codec:png_codec_base_hdrs",
-				"//src/codec:png_codec_base_srcs",
-			},
-		},
 		{Var: "skia_codec_libpng_srcs",
 			Rules: []string{
 				"//src/codec:buffet_libpng_srcs",
@@ -165,15 +155,6 @@ var gniExportDescs = []exporter.GNIExportDesc{
 		// TODO(https://crbug.com/381900683): Rename this list.
 		{Var: "skia_encode_png_public",
 			Rules: []string{"//include/encode:png_hdrs"}},
-		// TODO(https://crbug.com/381900683): Replace this with more granular lists
-		// (with `skia_encode_libpng_srcs` + `skia_encode_png_base`.
-		{Var: "skia_encode_png_srcs",
-			Rules: []string{
-				"//src/encode:png_encode_base_srcs",
-				"//src/encode:png_encode_base_hdrs",
-				"//src/encode:png_encode_srcs",
-				"//src/encode:png_encode_hdrs",
-			}},
 		{Var: "skia_encode_webp_public",
 			Rules: []string{"//include/encode:webp_hdrs"}},
 		{Var: "skia_encode_webp_srcs",
@@ -312,6 +293,10 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/ports:typeface_fontations_hdrs",
 				"//src/ports:typeface_fontations_srcs",
 			}},
+		{Var: "skia_ports_fontations_bridge_rust_side_sources",
+			Rules: []string{
+				"//src/ports/fontations:bridge_rust_side_srcs",
+			}},
 		{Var: "skia_ports_typeface_proxy_sources",
 			Rules: []string{
 				"//src/ports:typeface_proxy_hdrs",
@@ -350,6 +335,8 @@ var gniExportDescs = []exporter.GNIExportDesc{
 				"//src/pdf:_pdf_hdrs",
 				"//src/pdf:_pdf_srcs",
 			}},
+		{Var: "skia_pdf_jpeg_public",
+			Rules: []string{"//include/docs:pdf_jpeg_hdrs"}},
 	}},
 	{GNI: "gn/sksl.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skia_sksl_core_sources",
@@ -711,6 +698,8 @@ var gniExportDescs = []exporter.GNIExportDesc{
 			Rules: []string{"//modules/skunicode/src:icu4x_srcs"}},
 		{Var: "skia_unicode_client_icu_sources",
 			Rules: []string{"//modules/skunicode/src:client_srcs"}},
+		{Var: "skia_unicode_bidi_sources",
+			Rules: []string{"//modules/skunicode/src:bidi_srcs"}},
 		{Var: "skia_unicode_builtin_icu_sources",
 			Rules: []string{"//modules/skunicode/src:builtin_srcs"}},
 		{Var: "skia_unicode_runtime_icu_sources",
@@ -763,6 +752,10 @@ var gniExportDescs = []exporter.GNIExportDesc{
 	{GNI: "modules/jsonreader/jsonreader.gni", Vars: []exporter.GNIFileListExportDesc{
 		{Var: "skia_jsonreader_sources",
 			Rules: []string{"//modules/jsonreader:jsonreader"}},
+	}},
+	{GNI: "modules/skcapture/skcapture.gni", Vars: []exporter.GNIFileListExportDesc{
+		{Var: "skia_skcapture_sources",
+			Rules: []string{"//modules/skcapture:skcapture"}},
 	}},
 }
 

@@ -29,6 +29,12 @@ rollbazel() {
   git add bazel/deps.bzl
 }
 
+rolldepsgen() {
+  STEP="roll-depsgen" &&
+  sed -i'' -e "s!Version: \"${HB_PREVIOUS_REV}\",!Version: \"${HB_NEXT_REV}\",!" infra/bots/deps/deps_gen.go &&
+  git add infra/bots/deps/deps_gen.go
+}
+
 check_all_files_are_categorized() {
   #for each file name in ${HB_GIT_DIR}/src/hb-*.{cc,h,hh}
   #  if the file name is not present in BUILD.gn
@@ -78,6 +84,12 @@ check_all_files_are_categorized() {
   )
 }
 
+update_bazel_patch() {
+  STEP="Update Bazel patch" &&
+  python3 tools/generate_patches.py "${HB_BUILD_DIR}/config-override.h" config-override.h > bazel/external/harfbuzz/config_files.patch &&
+  git add bazel/external/harfbuzz/config_files.patch
+}
+
 commit() {
   STEP="commit" &&
   HB_PREVIOUS_REV_SHORT=$(expr substr "${HB_PREVIOUS_REV}" 1 8) &&
@@ -94,6 +106,8 @@ previousrev &&
 nextrev &&
 rolldeps "$@" &&
 rollbazel &&
+rolldepsgen &&
 check_all_files_are_categorized &&
+update_bazel_patch &&
 commit &&
 true || { echo "Failed step ${STEP}"; exit 1; }

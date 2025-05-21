@@ -38,7 +38,6 @@
 #include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/GrRecordingContext.h"
 #include "include/gpu/ganesh/GrTypes.h"
-#include "include/private/SkColorData.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkFixed.h"
 #include "include/private/base/SkFloatingPoint.h"
@@ -48,6 +47,7 @@
 #include "src/base/SkFloatBits.h"
 #include "src/base/SkTLazy.h"
 #include "src/core/SkBlurMaskFilterImpl.h"
+#include "src/core/SkColorData.h"
 #include "src/core/SkDraw.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskFilterBase.h"
@@ -1096,7 +1096,7 @@ static bool direct_filter_mask(GrRecordingContext* context,
         sdc->drawRect(clip, std::move(paint), GrAA::kNo, viewMatrix, srcProxyRect);
         return true;
     }
-    if (!viewMatrix.isScaleTranslate()) {
+    if (!viewMatrix.rectStaysRect()) {
         return false;
     }
     if (!devRRectIsValid || !SkRRectPriv::AllCornersCircular(devRRect)) {
@@ -1565,7 +1565,7 @@ void DrawShapeWithMaskFilter(GrRecordingContext* rContext,
     }
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaint(rContext, sdc->colorInfo(), paint, ctm, sdc->surfaceProps(), &grPaint)) {
+    if (!SkPaintToGrPaint(sdc, paint, ctm, &grPaint)) {
         return;
     }
 

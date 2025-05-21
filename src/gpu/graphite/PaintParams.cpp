@@ -258,21 +258,32 @@ void PaintParams::handleClipping(const KeyContext& keyContext,
                                  PipelineDataGatherer* gatherer) const {
     if (!fNonMSAAClip.isEmpty()) {
         const AnalyticClip& analyticClip = fNonMSAAClip.fAnalyticClip;
-        float radius = analyticClip.fRadius + 0.5f;
-        // N.B.: Because the clip data is normally used with depth-based clipping,
-        // the shape is inverted from its usual state. We re-invert here to
-        // match what the shader snippet expects.
-        SkPoint radiusPair = {(analyticClip.fInverted) ? radius : -radius, 1.0f/radius};
+        SkPoint radiusPair;
+        SkRect analyticBounds;
+        if (!analyticClip.isEmpty()) {
+            float radius = analyticClip.fRadius + 0.5f;
+            // N.B.: Because the clip data is normally used with depth-based clipping,
+            // the shape is inverted from its usual state. We re-invert here to
+            // match what the shader snippet expects.
+            radiusPair = {(analyticClip.fInverted) ? radius : -radius, 1.0f/radius};
+            analyticBounds = analyticClip.fBounds.makeOutset(0.5f).asSkRect();
+        } else {
+            // This will generate no analytic clip.
+            radiusPair = { -0.5f, 1.f };
+            analyticBounds = { 0, 0, 0, 0 };
+        }
 
         const AtlasClip& atlasClip = fNonMSAAClip.fAtlasClip;
-        skvx::float2 maskSize = atlasClip.fMaskBounds.size();
+        SkISize maskSize = atlasClip.fMaskBounds.size();
         SkRect texMaskBounds = SkRect::MakeXYWH(atlasClip.fOutPos.x(), atlasClip.fOutPos.y(),
-                                                maskSize.x(), maskSize.y());
-        SkPoint texCoordOffset = {atlasClip.fOutPos.x() - atlasClip.fMaskBounds.left(),
-                                  atlasClip.fOutPos.y() - atlasClip.fMaskBounds.top()};
+                                                maskSize.width(), maskSize.height());
+        // Outset bounds to capture some of the padding (necessary for inverse clip)
+        texMaskBounds.outset(0.5f, 0.5f);
+        SkPoint texCoordOffset = SkPoint::Make(atlasClip.fOutPos.x() - atlasClip.fMaskBounds.left(),
+                                               atlasClip.fOutPos.y() - atlasClip.fMaskBounds.top());
 
         NonMSAAClipBlock::NonMSAAClipData data(
-                analyticClip.fBounds.makeOutset(0.5f).asSkRect(),
+                analyticBounds,
                 radiusPair,
                 analyticClip.edgeSelectRect(),
                 texCoordOffset,

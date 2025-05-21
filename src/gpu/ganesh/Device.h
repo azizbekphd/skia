@@ -37,7 +37,6 @@ class GrClip;
 class GrRecordingContext;
 class GrRenderTargetProxy;
 class GrSurfaceProxy;
-class SkBitmap;
 class SkBlender;
 class SkColorSpace;
 class SkDrawable;
@@ -192,7 +191,7 @@ public:
     void drawVertices(const SkVertices*, sk_sp<SkBlender>, const SkPaint&, bool) override;
     void drawMesh(const SkMesh&, sk_sp<SkBlender>, const SkPaint&) override;
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
-    void drawShadow(const SkPath&, const SkDrawShadowRec&) override;
+    void drawShadow(SkCanvas*, const SkPath&, const SkDrawShadowRec&) override;
 #endif
     void drawAtlas(const SkRSXform[], const SkRect[], const SkColor[], int count, sk_sp<SkBlender>,
                    const SkPaint&) override;
@@ -216,6 +215,9 @@ public:
     void drawDevice(SkDevice*, const SkSamplingOptions&, const SkPaint&) override;
     void drawSpecial(SkSpecialImage*, const SkMatrix& localToDevice, const SkSamplingOptions&,
                      const SkPaint&, SkCanvas::SrcRectConstraint) override;
+
+    void drawCoverageMask(const SkSpecialImage* mask, const SkMatrix& maskToDevice,
+                          const SkSamplingOptions& localToDevice, const SkPaint& paint) override;
 
     void drawEdgeAAQuad(const SkRect& rect, const SkPoint clip[4], SkCanvas::QuadAAFlags aaFlags,
                         const SkColor4f& color, SkBlendMode mode) override;
@@ -247,8 +249,6 @@ public:
 
     void drawSlug(SkCanvas*, const sktext::gpu::Slug* slug, const SkPaint& paint) override;
 
-    sk_sp<SkSpecialImage> makeSpecial(const SkBitmap&) override;
-    sk_sp<SkSpecialImage> makeSpecial(const SkImage*) override;
     sk_sp<SkSpecialImage> snapSpecial(const SkIRect& subset, bool forceCopy = false) override;
     sk_sp<SkSpecialImage> snapSpecialScaled(const SkIRect& subset, const SkISize& dstDims) override;
 

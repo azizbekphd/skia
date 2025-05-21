@@ -152,7 +152,7 @@ public:
         Verbs(const SkPath& path) : fPathRef(path.fPathRef.get()) {}
         struct Iter {
             void operator++() { fVerb++; }
-            bool operator!=(const Iter& b) { return fVerb != b.fVerb; }
+            bool operator!=(const Iter& b) const { return fVerb != b.fVerb; }
             SkPath::Verb operator*() { return static_cast<SkPath::Verb>(*fVerb); }
             const uint8_t* fVerb;
         };
@@ -459,10 +459,6 @@ class SkPathEdgeIter {
     bool            fNextIsNewContour;
     SkDEBUGCODE(bool fIsConic;)
 
-    enum {
-        kIllegalEdgeValue = 99
-    };
-
 public:
     SkPathEdgeIter(const SkPath& path);
 
@@ -472,10 +468,11 @@ public:
     }
 
     enum class Edge {
-        kLine  = SkPath::kLine_Verb,
-        kQuad  = SkPath::kQuad_Verb,
+        kLine = SkPath::kLine_Verb,
+        kQuad = SkPath::kQuad_Verb,
         kConic = SkPath::kConic_Verb,
         kCubic = SkPath::kCubic_Verb,
+        kInvalid = 99,
     };
 
     static SkPath::Verb EdgeToVerb(Edge e) {
@@ -503,9 +500,7 @@ public:
         for (;;) {
             SkASSERT(fVerbs <= fVerbsStop);
             if (fVerbs == fVerbsStop) {
-                return fNeedsCloseLine
-                    ? closeline()
-                    : Result{ nullptr, Edge(kIllegalEdgeValue), false };
+                return fNeedsCloseLine ? closeline() : Result{nullptr, Edge::kInvalid, false};
             }
 
             SkDEBUGCODE(fIsConic = false;)

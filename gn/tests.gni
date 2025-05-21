@@ -52,6 +52,7 @@ tests_sources = [
   "$_tests/ColorTest.cpp",
   "$_tests/CompressedBackendAllocationTest.cpp",
   "$_tests/CopySurfaceTest.cpp",
+  "$_tests/CoreBlittersTest.cpp",
   "$_tests/CubicChopTest.cpp",
   "$_tests/CubicMapTest.cpp",
   "$_tests/CubicRootsTest.cpp",
@@ -68,6 +69,7 @@ tests_sources = [
   "$_tests/DrawBitmapRectTest.cpp",
   "$_tests/DrawPathTest.cpp",
   "$_tests/DrawTextTest.cpp",
+  "$_tests/EdgeTest.cpp",
   "$_tests/EmptyPathTest.cpp",
   "$_tests/EncodeTest.cpp",
   "$_tests/EncodedInfoTest.cpp",
@@ -204,6 +206,7 @@ tests_sources = [
   "$_tests/RRectInPathTest.cpp",
   "$_tests/RTreeTest.cpp",
   "$_tests/RandomTest.cpp",
+  "$_tests/RasterContextTest.cpp",
   "$_tests/RasterPipelineBuilderTest.cpp",
   "$_tests/RasterPipelineCodeGeneratorTest.cpp",
   "$_tests/ReadPixelsTest.cpp",
@@ -383,16 +386,23 @@ graphite_tests_sources = [
 ]
 
 precompile_tests_sources = [
+  "$_tests/graphite/precompile/AndroidPrecompileTest.cpp",
   "$_tests/graphite/precompile/ChromePrecompileTest.cpp",
   "$_tests/graphite/precompile/CombinationBuilderTest.cpp",
   "$_tests/graphite/precompile/PaintParamsKeyTest.cpp",
+  "$_tests/graphite/precompile/PrecompileStatsTest.cpp",
+  "$_tests/graphite/precompile/PrecompileTestUtils.cpp",
+  "$_tests/graphite/precompile/PrecompileTestUtils.h",
   "$_tests/graphite/precompile/ThreadedPrecompileTest.cpp",
+  "$_tests/graphite/precompile/UserdefinedStableKeyTest.cpp",
 ]
 
 graphite_dawn_tests_sources = [ "$_tests/graphite/DawnBackendTextureTest.cpp" ]
 graphite_metal_tests_sources = [ "$_tests/graphite/MtlBackendTextureTest.mm" ]
-graphite_vulkan_tests_sources =
-    [ "$_tests/graphite/VulkanBackendTextureTest.cpp" ]
+graphite_vulkan_tests_sources = [
+  "$_tests/graphite/VulkanBackendTextureTest.cpp",
+  "$_tests/graphite/VulkanDstReadRenderpassReuseTest.cpp",
+]
 
 pathops_tests_sources = [
   "$_tests/PathOpsAngleIdeas.cpp",

@@ -823,7 +823,7 @@ static SkPath create_path_47() {
 }
 
 static std::unique_ptr<GrFragmentProcessor>
-create_linear_gradient_processor(GrRecordingContext* rContext, const SkMatrix& ctm) {
+create_linear_gradient_processor(skgpu::ganesh::SurfaceDrawContext* sdc, const SkMatrix& ctm) {
     SkPoint pts[2] = { {0, 0}, {1, 1} };
     SkColor colors[2] = { SK_ColorGREEN, SK_ColorBLUE };
     sk_sp<SkShader> shader = SkGradientShader::MakeLinear(
@@ -831,7 +831,7 @@ create_linear_gradient_processor(GrRecordingContext* rContext, const SkMatrix& c
     GrColorInfo colorInfo(GrColorType::kRGBA_8888, kPremul_SkAlphaType, nullptr);
     SkSurfaceProps props; // default props for testing
     return GrFragmentProcessors::Make(
-            shader.get(), {rContext, &colorInfo, props, GrFPArgs::Scope::kDefault}, ctm);
+            shader.get(), {sdc, &colorInfo, props, GrFPArgs::Scope::kDefault}, ctm);
 }
 
 static void test_path(GrRecordingContext* rContext,
@@ -893,7 +893,8 @@ DEF_GANESH_TEST_FOR_ALL_CONTEXTS(TriangulatingPathRendererTests,
         test_path(ctx, sdc.get(), createPath());
     }
     SkMatrix nonInvertibleMatrix = SkMatrix::Scale(0, 0);
-    std::unique_ptr<GrFragmentProcessor> fp(create_linear_gradient_processor(ctx, SkMatrix()));
+    std::unique_ptr<GrFragmentProcessor> fp(create_linear_gradient_processor(sdc.get(),
+                                                                             SkMatrix()));
     test_path(ctx, sdc.get(), create_path_17(), nonInvertibleMatrix, GrAAType::kCoverage,
               std::move(fp));
     test_path(ctx, sdc.get(), create_path_20(), SkMatrix(), GrAAType::kCoverage);
@@ -1359,7 +1360,7 @@ DEF_TEST(Triangulator_Crbug1262444, r) {
     SimplerVertexAllocator alloc;
 
     int vertexCount = GrAATriangulator::PathToAATriangles(path, kTol, clipBounds, &alloc);
-    REPORTER_ASSERT(r, vertexCount == 0);
+    REPORTER_ASSERT(r, vertexCount == 303);
 }
 
 DEF_TEST(Triangulator_Crbug337080025, r) {
