@@ -7,11 +7,12 @@
 #include "modules/skshaper/include/SkShaper_harfbuzz.h"
 
 namespace {
-#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
-    const char* kColorEmojiFontMac = "Apple Color Emoji";
-#else
-    const char* kColorEmojiLocale = "und-Zsye";
-#endif
+// #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
+//     const char* kColorEmojiFontMac = "Apple Color Emoji";
+// #else
+//     const char* kColorEmojiLocale = "und-Zsye";
+// #endif
+    const char* kNotoColorEmoji = "Noto Color Emoji";
 }
 namespace skia {
 namespace textlayout {
@@ -66,6 +67,10 @@ void FontCollection::setDefaultFontManager(sk_sp<SkFontMgr> fontManager,
 void FontCollection::setDefaultFontManager(sk_sp<SkFontMgr> fontManager) {
     fDefaultFontManager = std::move(fontManager);
 }
+
+// void FontCollection::setEmojiFontName(char* emojiFontName) {
+//     fEmojiFontName = emojiFontName;
+// }
 
 // Return the available font managers in the order they should be queried.
 std::vector<sk_sp<SkFontMgr>> FontCollection::getFontManagerOrder() const {
@@ -176,15 +181,16 @@ sk_sp<SkTypeface> FontCollection::defaultEmojiFallback(SkUnichar emojiStart,
 
     for (const auto& manager : this->getFontManagerOrder()) {
         std::vector<const char*> bcp47;
-#if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
-        sk_sp<SkTypeface> emojiTypeface =
-            fDefaultFontManager->matchFamilyStyle(kColorEmojiFontMac, SkFontStyle());
-        if (emojiTypeface != nullptr) {
-            return emojiTypeface;
-        }
-#else
-          bcp47.push_back(kColorEmojiLocale);
-#endif
+// #if defined(SK_BUILD_FOR_MAC) || defined(SK_BUILD_FOR_IOS)
+            sk_sp<SkTypeface> emojiTypeface =
+                // fDefaultFontManager->matchFamilyStyle(fEmojiFontName.c_str(), SkFontStyle());
+                fDefaultFontManager->matchFamilyStyle(kNotoColorEmoji, SkFontStyle());
+            if (emojiTypeface != nullptr) {
+                return emojiTypeface;
+            }
+// #else
+//         bcp47.push_back(kColorEmojiLocale);
+// #endif
         if (!locale.isEmpty()) {
             bcp47.push_back(locale.c_str());
         }

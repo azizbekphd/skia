@@ -10,6 +10,7 @@
 
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPathTypes.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
@@ -239,6 +240,10 @@ public:
     /** Moves all vertices inwards or outwards by a given offset
     */
     void shiftVertices(SkScalar offset, SkPath* dst) const;
+
+    /** Moves all vertices inwards or outwards by a given offset for a closed path
+    */
+    void shiftVerticesClosed(SkScalar offset, SkPath* dst) const;
 
     /** Returns if FillType describes area outside SkPath geometry. The inverse fill area
         extends indefinitely.

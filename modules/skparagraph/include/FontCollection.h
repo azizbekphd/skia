@@ -31,6 +31,8 @@ public:
     void setDefaultFontManager(sk_sp<SkFontMgr> fontManager, const char defaultFamilyName[]);
     void setDefaultFontManager(sk_sp<SkFontMgr> fontManager, const std::vector<SkString>& defaultFamilyNames);
 
+    // void setEmojiFontName(char* emojiFontName);
+
     sk_sp<SkFontMgr> getFallbackManager() const { return fDefaultFontManager; }
 
     std::vector<sk_sp<SkTypeface>> findTypefaces(const std::vector<SkString>& familyNames, SkFontStyle fontStyle);
@@ -79,6 +81,7 @@ private:
 
     std::vector<SkString> fDefaultFamilyNames;
     ParagraphCache fParagraphCache;
+    // char* fEmojiFontName;
 };
 }  // namespace textlayout
 }  // namespace skia

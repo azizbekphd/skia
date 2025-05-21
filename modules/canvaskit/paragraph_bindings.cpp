@@ -551,6 +551,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
                     optional_override([](SimpleParagraphStyle style, sk_sp<SkFontMgr> fontMgr)
                                               -> std::unique_ptr<para::ParagraphBuilderImpl> {
                         auto fc = sk_make_sp<para::FontCollection>();
+                        // fc->setEmojiFontName(emojiFontName);
                         fc->setDefaultFontManager(fontMgr);
                         fc->enableFontFallback();
                         auto ps = toParagraphStyle(style);
@@ -775,6 +776,9 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
       .class_function("Make", optional_override([]()-> sk_sp<para::FontCollection> {
           return sk_make_sp<para::FontCollection>();
       }))
+      // .function("setEmojiFontName", optional_override([](para::FontCollection& self, char* emojiFontName) {
+      //   self.setEmojiFontName(emojiFontName);
+      // }), allow_raw_pointers())
       .function("setDefaultFontManager", optional_override([](para::FontCollection& self,
                                                               const sk_sp<para::TypefaceFontProvider>& fontManager) {
         self.setDefaultFontManager(fontManager);
@@ -792,6 +796,9 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         // .field("width",     &SimpleFontStyle::width);
 
     value_object<SimpleParagraphStyle>("ParagraphStyle")
+        .field("textAlign",            &SimpleParagraphStyle::textAlign)
+        .field("textDirection",        &SimpleParagraphStyle::textDirection)
+        .field("textStyle",            &SimpleParagraphStyle::textStyle);
         // .field("disableHinting",       &SimpleParagraphStyle::disableHinting)
         // .field("_ellipsisPtr",         &SimpleParagraphStyle::ellipsisPtr)
         // .field("_ellipsisLen",         &SimpleParagraphStyle::ellipsisLen)
@@ -799,11 +806,8 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         // .field("maxLines",             &SimpleParagraphStyle::maxLines)
         // .field("replaceTabCharacters", &SimpleParagraphStyle::replaceTabCharacters)
         // .field("textHeightBehavior",   &SimpleParagraphStyle::textHeightBehavior)
-        // .field("strutStyle",           &SimpleParagraphStyle::strutStyle)
         // .field("applyRoundingHack",    &SimpleParagraphStyle::applyRoundingHack);
-        .field("textAlign",            &SimpleParagraphStyle::textAlign)
-        .field("textDirection",        &SimpleParagraphStyle::textDirection)
-        .field("textStyle",            &SimpleParagraphStyle::textStyle);
+        // .field("strutStyle",           &SimpleParagraphStyle::strutStyle)
 
     value_object<SimpleStrutStyle>("StrutStyle")
         .field("_fontFamiliesPtr", &SimpleStrutStyle::fontFamiliesPtr)
@@ -817,6 +821,15 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .field("forceStrutHeight", &SimpleStrutStyle::forceStrutHeight);
 
     value_object<SimpleTextStyle>("TextStyle")
+        .field("_colorPtr",               &SimpleTextStyle::colorPtr)
+        .field("decoration",              &SimpleTextStyle::decoration)
+        .field("decorationThickness",     &SimpleTextStyle::decorationThickness)
+        .field("fontSize",                &SimpleTextStyle::fontSize)
+        .field("fontStyle",               &SimpleTextStyle::fontStyle)
+        .field("textBaseline",            &SimpleTextStyle::textBaseline)
+        .field("halfLeading",             &SimpleTextStyle::halfLeading)
+        .field("heightMultiplier",        &SimpleTextStyle::heightMultiplier)
+        .field("_decorationColorPtr",     &SimpleTextStyle::decorationColorPtr);
         // .field("_shadowLen",              &SimpleTextStyle::shadowLen)
         // .field("_shadowColorsPtr",        &SimpleTextStyle::shadowColorsPtr)
         // .field("_shadowOffsetsPtr",       &SimpleTextStyle::shadowOffsetsPtr)
@@ -829,21 +842,13 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         // .field("_fontVariationValuesPtr", &SimpleTextStyle::fontVariationValuesPtr);
         // .field("_foregroundColorPtr",     &SimpleTextStyle::foregroundColorPtr)
         // .field("_backgroundColorPtr",     &SimpleTextStyle::backgroundColorPtr)
-        // .field("decorationThickness",     &SimpleTextStyle::decorationThickness)
-        // .field("_decorationColorPtr",     &SimpleTextStyle::decorationColorPtr)
         // .field("decorationStyle",         &SimpleTextStyle::decorationStyle)
         // .field("_fontFamiliesPtr",        &SimpleTextStyle::fontFamiliesPtr)
         // .field("_fontFamiliesLen",        &SimpleTextStyle::fontFamiliesLen)
         // .field("letterSpacing",           &SimpleTextStyle::letterSpacing)
         // .field("wordSpacing",             &SimpleTextStyle::wordSpacing)
-        // .field("heightMultiplier",        &SimpleTextStyle::heightMultiplier)
-        // .field("halfLeading",             &SimpleTextStyle::halfLeading)
         // .field("_localePtr",              &SimpleTextStyle::localePtr)
         // .field("_localeLen",              &SimpleTextStyle::localeLen)
-        .field("_colorPtr",               &SimpleTextStyle::colorPtr)
-        .field("decoration",              &SimpleTextStyle::decoration)
-        .field("fontSize",                &SimpleTextStyle::fontSize)
-        .field("fontStyle",               &SimpleTextStyle::fontStyle);
 
     // The U stands for unsigned - we can't bind a generic/template object, so we have to specify it
     // with the type we are using.

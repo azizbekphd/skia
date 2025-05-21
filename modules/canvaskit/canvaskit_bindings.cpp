@@ -1110,6 +1110,10 @@ public:
             pdfDoc.reset();
         }
     }
+
+    SkWStreamWrapper* getStream() {
+        return stream;
+    }
 };
 
 EMSCRIPTEN_BINDINGS(Skia) {
@@ -1122,7 +1126,8 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .constructor<SkWStreamWrapper*>()
         .function("beginPage", &SkPDFDocumentWrapper::beginPage, emscripten::allow_raw_pointers())
         .function("endPage", &SkPDFDocumentWrapper::endPage)
-        .function("close", &SkPDFDocumentWrapper::close);
+        .function("close", &SkPDFDocumentWrapper::close)
+        .function("getStream", &SkPDFDocumentWrapper::getStream, emscripten::allow_raw_pointers());
 
 #ifdef ENABLE_GPU
     constant("gpu", true);
@@ -1747,6 +1752,10 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("getColorSpace", optional_override([](sk_sp<SkImage> self)->sk_sp<SkColorSpace> {
             return self->imageInfo().refColorSpace();
         }), allow_raw_pointers())
+        .function("makeNonTextureImage", optional_override([](sk_sp<SkImage> self,
+                                                              GrDirectContext* dContext)->sk_sp<SkImage> {
+            return self->makeNonTextureImage(dContext);
+        }), allow_raw_pointers())
         .function("getImageInfo", optional_override([](sk_sp<SkImage> self)->JSObject {
             // We cannot return a SimpleImageInfo because the colorspace object would be leaked.
             JSObject result = emscripten::val::object();
@@ -1758,9 +1767,9 @@ EMSCRIPTEN_BINDINGS(Skia) {
             return result;
         }))
         .function("height", &SkImage::height)
-       .function("_encodeToBytes", optional_override([](sk_sp<SkImage> self,
-                                                        SkEncodedImageFormat fmt,
-                                                        int quality) -> Uint8Array {
+        .function("_encodeToBytes", optional_override([](sk_sp<SkImage> self,
+                                                         SkEncodedImageFormat fmt,
+                                                         int quality) -> Uint8Array {
             return encodeImage(nullptr, self, fmt, quality);
         }))
 #if defined(ENABLE_GPU)

@@ -142,19 +142,19 @@ void Decorations::calculateThickness(TextStyle textStyle, sk_sp<SkTypeface> type
     textStyle.getFontMetrics(&fFontMetrics);
 
     fThickness = textStyle.getFontSize() / 14.0f;
-
-    if ((fFontMetrics.fFlags & SkFontMetrics::FontMetricsFlags::kUnderlineThicknessIsValid_Flag) &&
-         fFontMetrics.fUnderlineThickness > 0) {
-        fThickness = fFontMetrics.fUnderlineThickness;
-    }
-
-    if (textStyle.getDecorationType() == TextDecoration::kLineThrough) {
-        if ((fFontMetrics.fFlags & SkFontMetrics::FontMetricsFlags::kStrikeoutThicknessIsValid_Flag) &&
-             fFontMetrics.fStrikeoutThickness > 0) {
-            fThickness = fFontMetrics.fStrikeoutThickness;
-        }
-    }
     fThickness *= textStyle.getDecorationThicknessMultiplier();
+
+    // if ((fFontMetrics.fFlags & SkFontMetrics::FontMetricsFlags::kUnderlineThicknessIsValid_Flag) &&
+    //      fFontMetrics.fUnderlineThickness > 0) {
+    //     fThickness = fFontMetrics.fUnderlineThickness * 1.5f;
+    // }
+
+    // if (textStyle.getDecorationType() == TextDecoration::kLineThrough) {
+    //     if ((fFontMetrics.fFlags & SkFontMetrics::FontMetricsFlags::kStrikeoutThicknessIsValid_Flag) &&
+    //          fFontMetrics.fStrikeoutThickness > 0) {
+    //         fThickness = fFontMetrics.fStrikeoutThickness * 1.5f;
+    //     }
+    // }
 }
 
 // This is how flutter calculates the positioning
@@ -171,7 +171,7 @@ void Decorations::calculatePosition(TextDecoration decoration, SkScalar ascent) 
           break;
       case TextDecoration::kOverline:
           fPosition = - ascent;
-        break;
+          break;
       case TextDecoration::kLineThrough: {
           fPosition = (fFontMetrics.fFlags & SkFontMetrics::FontMetricsFlags::kStrikeoutPositionIsValid_Flag)
                      ? fFontMetrics.fStrikeoutPosition

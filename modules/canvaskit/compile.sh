@@ -13,6 +13,8 @@ pushd $BASE_DIR/../..
 
 IS_OFFICIAL_BUILD="false"
 IS_DEBUG="false"
+EXTRA_CFLAGS="[]"
+EXTRA_LDFLAGS="[]"
 FORCE_TRACING="false"
 PROFILE_BUILD="false"
 # Tracing will be disabled in release/profiling unless this flag is seen. Tracing will
@@ -24,6 +26,8 @@ fi
 if [[ $@ == *debug_build* ]]; then
   echo "Building a Debug build"
   IS_DEBUG="true"
+  EXTRA_CFLAGS="[\"-O1\"]"
+  EXTRA_LDFLAGS="[\"-sASSERTIONS=1\"]"
   IS_OFFICIAL_BUILD="false"
   BUILD_DIR=${BUILD_DIR:="out/canvaskit_wasm_debug"}
 elif [[ $@ == *profiling* ]]; then
@@ -200,6 +204,8 @@ echo "Compiling"
 ./bin/gn gen ${BUILD_DIR} \
   --args="is_debug=${IS_DEBUG} \
   is_official_build=${IS_OFFICIAL_BUILD} \
+  extra_cflags=${EXTRA_CFLAGS} \
+  extra_ldflags=${EXTRA_LDFLAGS} \
   is_component_build=false \
   is_trivial_abi=true \
   werror=true \

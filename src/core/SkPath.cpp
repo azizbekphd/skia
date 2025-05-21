@@ -8,6 +8,8 @@
 #include "include/core/SkPath.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPathUtils.h"
+#include "include/core/SkPathMeasure.h"
+#include "include/core/SkPathEffect.h"
 
 #include "include/core/SkScalar.h"
 #include "include/core/SkArc.h"
@@ -15,6 +17,8 @@
 #include "include/core/SkRRect.h"
 #include "include/core/SkStream.h"
 #include "include/core/SkString.h"
+#include "include/core/SkStrokeRec.h"
+#include "include/effects/SkTrimPathEffect.h"
 #include "include/private/SkPathRef.h"
 #include "include/private/base/SkFloatingPoint.h"
 #include "include/private/base/SkMalloc.h"
@@ -3972,30 +3976,273 @@ SkPathEdgeIter::SkPathEdgeIter(const SkPath& path) {
     SkDEBUGCODE(fIsConic = false;)
 }
 
-void SkPath::shiftVertices(SkScalar offset, SkPath* dst) const {
+struct PathCommand {
+    SkPath::Verb verb;
+    std::vector<SkPoint> pts;
+};
+
+double signedAngleBetweenVectors(const SkVector& a, const SkVector& b) {
+    double dotProduct = a.dot(b);
+    double magnitudeA = a.length();
+    double magnitudeB = b.length();
+
+    if (magnitudeA == 0 || magnitudeB == 0) {
+        return 0.0;
+    }
+
+    double cosTheta = dotProduct / (magnitudeA * magnitudeB);
+    cosTheta = std::max(-1.0, std::min(1.0, cosTheta));
+
+    double theta = std::acos(cosTheta);
+
+    double crossProduct = a.fX * b.fY - a.fY * b.fX;
+    if (crossProduct < 0) {
+        theta = -theta;
+    }
+
+    return theta;
+}
+
+void SkPath::shiftVertices(SkScalar offset, SkPath* result) const {
     SkASSERT(dst);
 
-    static SkPaint paint;
-    static bool isInitialized = false;
-    static SkPath strokePath;
+    if (this->isLastContourClosed()) {
+        static SkPaint paint;
+        static bool isInitialized = false;
+        static SkPath strokePath;
+        static SkPath newPath;
 
-    if (!isInitialized) {
-        paint.setAntiAlias(true);
-        paint.setStyle(SkPaint::kStroke_Style);
-        isInitialized = true;
-    }
+        if (!isInitialized) {
+            paint.setAntiAlias(true);
+            paint.setStyle(SkPaint::kStroke_Style);
+            isInitialized = true;
+        }
 
-    paint.setStrokeWidth(abs(offset) * 2);
+        paint.setStrokeWidth(abs(offset) * 2);
 
-    skpathutils::FillPathWithPaint(*this, paint, &strokePath);
+        skpathutils::FillPathWithPaint(*this, paint, &strokePath);
 
-    if (offset > 0) {
-        Op(*this, strokePath, SkPathOp::kUnion_SkPathOp, dst);
-    } else if (offset < 0) {
-        Op(strokePath, *this, SkPathOp::kReverseDifference_SkPathOp, dst);
+        if (offset > 0) {
+            Op(*this, strokePath, SkPathOp::kUnion_SkPathOp, result);
+        } else if (offset < 0) {
+            Op(strokePath, *this, SkPathOp::kReverseDifference_SkPathOp, result);
+        } else {
+            *result = strokePath;
+        }
+        strokePath.reset();
     } else {
-        *dst = strokePath;
-    }
+        SkPath::Iter iter(*this, false);
 
-    strokePath.reset();
+        SkPoint pts[4];
+        SkPoint prevPoint, currPoint;
+        bool hasPrev = false;
+        bool hasPrevNormal = false;
+        SkVector prevNormal = {0, 0};
+
+        SkTDArray<SkPoint> shiftedPts;
+        offset = -offset;
+
+        for (SkPath::Verb verb = iter.next(pts); verb != SkPath::kDone_Verb;
+             verb = iter.next(pts)) {
+            switch (verb) {
+                case SkPath::kMove_Verb:
+                    if (!shiftedPts.empty()) {
+                        result->moveTo(shiftedPts[0]);
+                        for (int i = 1; i < shiftedPts.size(); ++i) {
+                            result->lineTo(shiftedPts[i]);
+                        }
+                        shiftedPts.reset();
+                    }
+                    result->moveTo(pts[0]);
+                    prevPoint = pts[0];
+                    hasPrev = true;
+                    hasPrevNormal = false;
+                    break;
+                case SkPath::kLine_Verb: {
+                    currPoint = pts[1];
+                    if (!hasPrev) {
+                        prevPoint = pts[0];
+                        hasPrev = true;
+                    }
+                    SkVector edge = { currPoint.fX - prevPoint.fX, currPoint.fY - prevPoint.fY };
+                    SkScalar len = SkScalarSqrt(edge.fX * edge.fX + edge.fY * edge.fY);
+                    if (len != 0) {
+                        edge.fX /= len;
+                        edge.fY /= len;
+                    }
+                    SkVector currNormal = { -edge.fY, edge.fX };
+
+                    if (hasPrevNormal) {
+                        SkVector avg = { prevNormal.fX + currNormal.fX, prevNormal.fY + currNormal.fY };
+                        SkScalar avgLen = SkScalarSqrt(avg.fX * avg.fX + avg.fY * avg.fY);
+                        if (avgLen != 0) {
+                            avg.fX /= avgLen;
+                            avg.fY /= avgLen;
+                        }
+                        SkPoint shifted = { currPoint.fX + offset * avg.fX, currPoint.fY + offset * avg.fY };
+                        shiftedPts.push_back(shifted);
+                    } else {
+                        SkPoint shiftedStart = { prevPoint.fX + offset * currNormal.fX,
+                                                 prevPoint.fY + offset * currNormal.fY };
+                        shiftedPts.push_back(shiftedStart);
+                        SkPoint shiftedEnd = { currPoint.fX + offset * currNormal.fX,
+                                               currPoint.fY + offset * currNormal.fY };
+                        shiftedPts.push_back(shiftedEnd);
+                    }
+                    prevPoint = currPoint;
+                    prevNormal = currNormal;
+                    hasPrevNormal = true;
+                    break;
+                }
+                case SkPath::kQuad_Verb: {
+                    SkPoint ctrl = pts[0];
+                    SkPoint end = pts[1];
+                    SkVector t0 = { ctrl.fX - prevPoint.fX, ctrl.fY - prevPoint.fY };
+                    SkScalar len0 = SkScalarSqrt(t0.fX * t0.fX + t0.fY * t0.fY);
+                    if (len0 != 0) {
+                        t0.fX /= len0;
+                        t0.fY /= len0;
+                    }
+                    SkVector n0 = { -t0.fY, t0.fX };
+
+                    SkVector t1 = { end.fX - ctrl.fX, end.fY - ctrl.fY };
+                    SkScalar len1 = SkScalarSqrt(t1.fX * t1.fX + t1.fY * t1.fY);
+                    if (len1 != 0) {
+                        t1.fX /= len1;
+                        t1.fY /= len1;
+                    }
+                    SkVector n1 = { -t1.fY, t1.fX };
+
+                    SkVector avg = { n0.fX + n1.fX, n0.fY + n1.fY };
+                    SkScalar avgLen = SkScalarSqrt(avg.fX * avg.fX + avg.fY * avg.fY);
+                    if (avgLen != 0) {
+                        avg.fX /= avgLen;
+                        avg.fY /= avgLen;
+                    }
+
+                    // SkPoint startShifted = { prevPoint.fX + offset * n0.fX, prevPoint.fY + offset * n0.fY };
+                    SkPoint ctrlShifted = { ctrl.fX + offset * avg.fX, ctrl.fY + offset * avg.fY };
+                    SkPoint endShifted  = { end.fX  + offset * n1.fX,  end.fY  + offset * n1.fY };
+
+                    result->quadTo(ctrlShifted, endShifted);
+
+                    prevPoint = end;
+                    prevNormal = n1;
+                    hasPrevNormal = true;
+                    break;
+                }
+                case SkPath::kConic_Verb: {
+                    // For a conic, pts[0] is the control point, pts[1] is the end point, and weight is given by iter.conicWeight().
+                    SkPoint ctrl = pts[0];
+                    SkPoint end = pts[1];
+                    SkScalar w = iter.conicWeight();
+
+                    // Compute tangent at start: T0 = ctrl - prevPoint.
+                    SkVector t0 = { ctrl.fX - prevPoint.fX, ctrl.fY - prevPoint.fY };
+                    SkScalar len0 = SkScalarSqrt(t0.fX * t0.fX + t0.fY * t0.fY);
+                    if (len0 != 0) {
+                        t0.fX /= len0;
+                        t0.fY /= len0;
+                    }
+                    SkVector n0 = { -t0.fY, t0.fX };
+
+                    // Compute tangent at end: T1 = end - ctrl.
+                    SkVector t1 = { end.fX - ctrl.fX, end.fY - ctrl.fY };
+                    SkScalar len1 = SkScalarSqrt(t1.fX * t1.fX + t1.fY * t1.fY);
+                    if (len1 != 0) {
+                        t1.fX /= len1;
+                        t1.fY /= len1;
+                    }
+                    SkVector n1 = { -t1.fY, t1.fX };
+
+                    // Average the two normals.
+                    SkVector avg = { n0.fX + n1.fX, n0.fY + n1.fY };
+                    SkScalar avgLen = SkScalarSqrt(avg.fX * avg.fX + avg.fY * avg.fY);
+                    if (avgLen != 0) {
+                        avg.fX /= avgLen;
+                        avg.fY /= avgLen;
+                    }
+
+                    SkPoint ctrlShifted = { ctrl.fX + offset * avg.fX, ctrl.fY + offset * avg.fY };
+                    SkPoint endShifted  = { end.fX  + offset * n1.fX,  end.fY  + offset * n1.fY };
+
+                    result->conicTo(ctrlShifted, endShifted, w);
+
+                    prevPoint = end;
+                    prevNormal = n1;
+                    hasPrevNormal = true;
+                    break;
+                }
+                case SkPath::kCubic_Verb: {
+                    SkPoint ctrl1 = pts[0];
+                    SkPoint ctrl2 = pts[1];
+                    SkPoint end = pts[2];
+
+                    SkVector t0 = { ctrl1.fX - prevPoint.fX, ctrl1.fY - prevPoint.fY };
+                    SkScalar len0 = SkScalarSqrt(t0.fX * t0.fX + t0.fY * t0.fY);
+                    if (len0 != 0) {
+                        t0.fX /= len0;
+                        t0.fY /= len0;
+                    }
+                    SkVector n0 = { -t0.fY, t0.fX };
+
+                    SkVector t1 = { end.fX - ctrl2.fX, end.fY - ctrl2.fY };
+                    SkScalar len1 = SkScalarSqrt(t1.fX * t1.fX + t1.fY * t1.fY);
+                    if (len1 != 0) {
+                        t1.fX /= len1;
+                        t1.fY /= len1;
+                    }
+                    SkVector n1 = { -t1.fY, t1.fX };
+
+                    SkVector seg = { ctrl2.fX - ctrl1.fX, ctrl2.fY - ctrl1.fY };
+                    SkScalar segLen = SkScalarSqrt(seg.fX * seg.fX + seg.fY * seg.fY);
+                    if (segLen != 0) {
+                        seg.fX /= segLen;
+                        seg.fY /= segLen;
+                    }
+                    SkVector nMid = { -seg.fY, seg.fX };
+
+                    SkVector avg1 = { n0.fX + nMid.fX, n0.fY + nMid.fY };
+                    SkScalar avg1Len = SkScalarSqrt(avg1.fX * avg1.fX + avg1.fY * avg1.fY);
+                    if (avg1Len != 0) {
+                        avg1.fX /= avg1Len;
+                        avg1.fY /= avg1Len;
+                    }
+                    SkPoint ctrl1Shifted = { ctrl1.fX + offset * avg1.fX, ctrl1.fY + offset * avg1.fY };
+
+                    SkVector avg2 = { nMid.fX + n1.fX, nMid.fY + n1.fY };
+                    SkScalar avg2Len = SkScalarSqrt(avg2.fX * avg2.fX + avg2.fY * avg2.fY);
+                    if (avg2Len != 0) {
+                        avg2.fX /= avg2Len;
+                        avg2.fY /= avg2Len;
+                    }
+                    SkPoint ctrl2Shifted = { ctrl2.fX + offset * avg2.fX, ctrl2.fY + offset * avg2.fY };
+
+                    SkPoint endShifted = { end.fX + offset * n1.fX, end.fY + offset * n1.fY };
+
+                    result->cubicTo(ctrl1Shifted, ctrl2Shifted, endShifted);
+
+                    prevPoint = end;
+                    prevNormal = n1;
+                    hasPrevNormal = true;
+                    break;
+                }
+                case SkPath::kClose_Verb:
+                    result->close();
+                    shiftedPts.reset();
+                    hasPrev = false;
+                    hasPrevNormal = false;
+                    break;
+                default:
+                    break;
+            }
+        }
+        if (!shiftedPts.empty()) {
+            result->moveTo(shiftedPts[0]);
+            for (int i = 1; i < shiftedPts.size(); ++i) {
+                result->lineTo(shiftedPts[i]);
+            }
+        }
+    }
 }
+
