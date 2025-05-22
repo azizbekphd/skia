@@ -4035,7 +4035,7 @@ double signedAngleBetweenVectors(const SkVector& a, const SkVector& b) {
 }
 
 void SkPath::shiftVertices(SkScalar offset, SkPath* result) const {
-    SkASSERT(dst);
+    SkASSERT(result);
 
     if (this->isLastContourClosed()) {
         static SkPaint paint;
