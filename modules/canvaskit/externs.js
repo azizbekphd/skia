@@ -748,8 +748,10 @@ var CanvasKit = {
     finishRecordingAsPicture: function() {},
     prototype: {
       beginRecording: function() {},
+      beginRecordingWithMatrix: function() {},
     },
     _beginRecording: function() {},
+    _beginRecordingWithMatrix: function() {},
   },
 
   Shader: {

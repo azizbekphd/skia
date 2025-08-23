@@ -11,6 +11,7 @@
 #include "include/core/SkDrawable.h"
 #include "include/core/SkPicture.h"
 #include "include/core/SkTypes.h"
+#include "include/core/SkMatrix.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/core/SkBigPicture.h"
 #include "src/core/SkRecord.h"
@@ -33,6 +34,7 @@ SkPictureRecorder::SkPictureRecorder() {
 SkPictureRecorder::~SkPictureRecorder() {}
 
 SkCanvas* SkPictureRecorder::beginRecording(const SkRect& userCullRect,
+                                            const SkMatrix& preMatrix,
                                             sk_sp<SkBBoxHierarchy> bbh) {
     const SkRect cullRect = userCullRect.isEmpty() ? SkRect::MakeEmpty() : userCullRect;
 
@@ -43,8 +45,21 @@ SkCanvas* SkPictureRecorder::beginRecording(const SkRect& userCullRect,
         fRecord.reset(new SkRecord);
     }
     fRecorder->reset(fRecord.get(), cullRect);
+    fRecorder->setMatrix(preMatrix);
+
     fActivelyRecording = true;
     return this->getRecordingCanvas();
+}
+
+SkCanvas* SkPictureRecorder::beginRecording(const SkRect& userCullRect,
+                                            sk_sp<SkBBoxHierarchy> bbh) {
+  return this->beginRecording(userCullRect, SkMatrix::I(), bbh);
+}
+
+SkCanvas* SkPictureRecorder::beginRecording(const SkRect& bounds,
+                                            const SkMatrix& preMatrix,
+                                            SkBBHFactory* factory) {
+    return this->beginRecording(bounds, preMatrix, factory ? (*factory)() : nullptr);
 }
 
 SkCanvas* SkPictureRecorder::beginRecording(const SkRect& bounds, SkBBHFactory* factory) {

@@ -1000,6 +1000,12 @@ CanvasKit.onRuntimeInitialized = function() {
     return this._beginRecording(bPtr, !!computeBounds);
   };
 
+  CanvasKit.PictureRecorder.prototype.beginRecordingWithMatrix = function (bounds, matrix, computeBounds) {
+    var bPtr = copyRectToWasm(bounds);
+    var mPtr = copy3x3MatrixToWasm(matrix);
+    return this._beginRecordingWithMatrix(bPtr, mPtr, !!computeBounds);
+  };
+
   CanvasKit.Surface.prototype.getCanvas = function() {
     var c = this._getCanvas();
     c._context = this._context;

@@ -4,6 +4,8 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
+// #include "include/core/SkString.h"
+// #include <string>
 #include "src/gpu/ganesh/gl/builders/GrGLProgramBuilder.h"
 
 #include "include/core/SkFourByteTag.h"
@@ -44,6 +46,21 @@
 
 #define GL_CALL(X) GR_GL_CALL(this->gpu()->glInterface(), X)
 #define GL_CALL_RET(R, X) GR_GL_CALL_RET(this->gpu()->glInterface(), R, X)
+
+// namespace {
+// std::string EscapeNewlines(const std::string& source) {
+//     std::string escaped;
+//     escaped.reserve(source.length() * 1.1);
+//     for (char c : source) {
+//         if (c == '\n') {
+//             escaped += "\\n";
+//         } else {
+//             escaped += c;
+//         }
+//     }
+//     return escaped;
+// }
+// }
 
 static void cleanup_shaders(GrGLGpu* gpu, const SkTDArray<GrGLuint>& shaderIDs) {
     for (int i = 0; i < shaderIDs.size(); ++i) {
@@ -351,6 +368,9 @@ sk_sp<GrGLProgram> GrGLProgramBuilder::finalize(const GrGLPrecompiledProgram* pr
                 cleanup_program(fGpu, programID, shadersToDelete);
                 return nullptr;
             }
+            // std::string fragmentShaderLog = EscapeNewlines(glsl[kFragment_GrShaderType]);
+            // SkDebugf("--- Generated GLSL Fragment Shader Source ---\n%s\n",
+            //          fragmentShaderLog.c_str());
         }
 
         this->addInputVars(interface);
@@ -380,6 +400,9 @@ sk_sp<GrGLProgram> GrGLProgramBuilder::finalize(const GrGLPrecompiledProgram* pr
                 cleanup_program(fGpu, programID, shadersToDelete);
                 return nullptr;
             }
+            // std::string vertexShaderLog = EscapeNewlines(glsl[kVertex_GrShaderType]);
+            // SkDebugf("--- Generated GLSL Vertex Shader Source ---\n%s\n",
+            //          vertexShaderLog.c_str());
         }
         if (!this->compileAndAttachShaders(glsl[kVertex_GrShaderType],
                                            programID,

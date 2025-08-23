@@ -60,6 +60,7 @@
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
 #include "include/docs/SkPDFDocument.h"
+#include "include/docs/SkPDFJpegHelpers.h"
 #include "include/private/base/SkOnce.h"
 #include "include/utils/SkParsePath.h"
 #include "include/utils/SkShadowUtils.h"
@@ -1081,7 +1082,15 @@ private:
 
 public:
     SkPDFDocumentWrapper(SkWStreamWrapper* stream) : stream(stream) {
-        pdfDoc = SkPDF::MakeDocument(stream);
+        SkPDF::Metadata metadata;
+        // metadata.fTitle = documentTitle;
+        // metadata.fCreator = "Example WritePDF() Function";
+        // metadata.fCreation = {0, 2019, 1, 4, 31, 12, 34, 56};
+        // metadata.fModified = {0, 2019, 1, 4, 31, 12, 34, 56};
+        // See also SkPDF::JPEG::MetadataWithCallbacks()
+        metadata.jpegDecoder = SkPDF::JPEG::Decode;
+        metadata.jpegEncoder = SkPDF::JPEG::Encode;
+        pdfDoc = SkPDF::MakeDocument(stream, metadata);
         if (!pdfDoc) {
             SkDebugf("Failed to create SkPDFDocument\n");
         }
@@ -2129,6 +2138,15 @@ EMSCRIPTEN_BINDINGS(Skia) {
                                                           bool computeBounds) -> SkCanvas* {
             SkRect* bounds = reinterpret_cast<SkRect*>(fPtr);
             return self.beginRecording(*bounds, computeBounds ? &bbhFactory : nullptr);
+        }), allow_raw_pointers())
+        .function("_beginRecordingWithMatrix", optional_override([](SkPictureRecorder& self,
+                                                            WASMPointerF32 rectPtr,
+                                                            WASMPointerF32 matrixPtr,
+                                                            bool computeBounds) -> SkCanvas* {
+            SkRect* bounds = reinterpret_cast<SkRect*>(rectPtr);
+            SkMatrix* matrix = reinterpret_cast<SkMatrix*>(matrixPtr);
+        
+            return self.beginRecording(*bounds, *matrix, computeBounds ? &bbhFactory : nullptr);
         }), allow_raw_pointers())
         .function("finishRecordingAsPicture", optional_override([](SkPictureRecorder& self)
                                                                    -> sk_sp<SkPicture> {

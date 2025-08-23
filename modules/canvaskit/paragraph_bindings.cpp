@@ -26,6 +26,7 @@
 
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include <emscripten.h>
 #include <emscripten/bind.h>
@@ -829,7 +830,9 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         .field("textBaseline",            &SimpleTextStyle::textBaseline)
         .field("halfLeading",             &SimpleTextStyle::halfLeading)
         .field("heightMultiplier",        &SimpleTextStyle::heightMultiplier)
-        .field("_decorationColorPtr",     &SimpleTextStyle::decorationColorPtr);
+        .field("_decorationColorPtr",     &SimpleTextStyle::decorationColorPtr)
+        .field("_fontFamiliesPtr",        &SimpleTextStyle::fontFamiliesPtr)
+        .field("_fontFamiliesLen",        &SimpleTextStyle::fontFamiliesLen);
         // .field("_shadowLen",              &SimpleTextStyle::shadowLen)
         // .field("_shadowColorsPtr",        &SimpleTextStyle::shadowColorsPtr)
         // .field("_shadowOffsetsPtr",       &SimpleTextStyle::shadowOffsetsPtr)
@@ -843,8 +846,6 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         // .field("_foregroundColorPtr",     &SimpleTextStyle::foregroundColorPtr)
         // .field("_backgroundColorPtr",     &SimpleTextStyle::backgroundColorPtr)
         // .field("decorationStyle",         &SimpleTextStyle::decorationStyle)
-        // .field("_fontFamiliesPtr",        &SimpleTextStyle::fontFamiliesPtr)
-        // .field("_fontFamiliesLen",        &SimpleTextStyle::fontFamiliesLen)
         // .field("letterSpacing",           &SimpleTextStyle::letterSpacing)
         // .field("wordSpacing",             &SimpleTextStyle::wordSpacing)
         // .field("_localePtr",              &SimpleTextStyle::localePtr)

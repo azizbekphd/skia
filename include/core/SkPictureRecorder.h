@@ -24,6 +24,7 @@ namespace android {
 class SkBBHFactory;
 class SkBBoxHierarchy;
 class SkCanvas;
+class SkMatrix;
 class SkDrawable;
 class SkPicture;
 class SkRecord;
@@ -44,6 +45,10 @@ public:
     SkCanvas* beginRecording(const SkRect& bounds, sk_sp<SkBBoxHierarchy> bbh);
 
     SkCanvas* beginRecording(const SkRect& bounds, SkBBHFactory* bbhFactory = nullptr);
+
+    SkCanvas* beginRecording(const SkRect& bounds, const SkMatrix& preMatrix, sk_sp<SkBBoxHierarchy> bbh);
+
+    SkCanvas* beginRecording(const SkRect& bounds, const SkMatrix& preMatrix, SkBBHFactory* bbhFactory = nullptr);
 
     SkCanvas* beginRecording(SkScalar width, SkScalar height,
                              SkBBHFactory* bbhFactory = nullptr) {

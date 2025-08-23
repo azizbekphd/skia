@@ -4,9 +4,11 @@
 #include "modules/skparagraph/src/Iterators.h"
 #include "modules/skshaper/include/SkShaper_harfbuzz.h"
 #include "src/base/SkUTF.h"
+#include "include/core/SkString.h"
 
 #include <algorithm>
 #include <cstdint>
+#include <iostream>
 #include <unordered_set>
 
 using namespace skia_private;
