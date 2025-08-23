@@ -8,6 +8,7 @@
 #ifndef skgpu_graphite_precompile_PaintOption_DEFINED
 #define skgpu_graphite_precompile_PaintOption_DEFINED
 
+#include "include/core/SkBlendMode.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkRefCnt.h"
 #include "src/gpu/graphite/Caps.h"
@@ -21,6 +22,7 @@ class PrecompileShader;
 class KeyContext;
 class PaintParamsKeyBuilder;
 class PipelineDataGatherer;
+class FloatStorageManager;
 
 class PaintOption {
 public:
@@ -29,41 +31,37 @@ public:
                 const std::pair<sk_sp<PrecompileShader>, int>& shader,
                 const std::pair<sk_sp<PrecompileColorFilter>, int>& colorFilter,
                 bool hasPrimitiveBlender,
+                SkBlendMode primitiveBlendMode,
+                bool skipColorXform,
                 const std::pair<sk_sp<PrecompileShader>, int>& clipShader,
                 bool dstReadRequired,
-                bool dither)
-        : fOpaquePaintColor(opaquePaintColor)
-        , fFinalBlender(finalBlender)
-        , fShader(shader)
-        , fColorFilter(colorFilter)
-        , fHasPrimitiveBlender(hasPrimitiveBlender)
-        , fClipShader(clipShader)
-        , fDstReadRequired(dstReadRequired)
-        , fDither(dither) {
-    }
+                bool dither,
+                bool analyticClip);
 
     const PrecompileBlender* finalBlender() const { return fFinalBlender.first.get(); }
 
-    void toKey(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
+    void toKey(const KeyContext&) const;
 
 private:
-    void addPaintColorToKey(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
-    void handlePrimitiveColor(const KeyContext&,
-                              PaintParamsKeyBuilder*,
-                              PipelineDataGatherer*) const;
-    void handlePaintAlpha(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
-    void handleColorFilter(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
+    void addPaintColorToKey(const KeyContext&) const;
+    void handlePrimitiveColor(const KeyContext&) const;
+    void handlePaintAlpha(const KeyContext&) const;
+    void handleColorFilter(const KeyContext&) const;
     bool shouldDither(SkColorType dstCT) const;
-    void handleDithering(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
+    void handleDithering(const KeyContext&) const;
+    void handleClipping(const KeyContext&) const;
 
     bool fOpaquePaintColor;
     std::pair<sk_sp<PrecompileBlender>, int> fFinalBlender;
     std::pair<sk_sp<PrecompileShader>, int> fShader;
     std::pair<sk_sp<PrecompileColorFilter>, int> fColorFilter;
+    SkBlendMode fPrimitiveBlendMode;
     bool fHasPrimitiveBlender;
+    bool fSkipColorXform;
     std::pair<sk_sp<PrecompileShader>, int> fClipShader;
     bool fDstReadRequired;
     bool fDither;
+    bool fAnalyticClip;
 };
 
 } // namespace skgpu::graphite

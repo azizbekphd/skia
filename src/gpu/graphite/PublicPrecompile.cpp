@@ -27,6 +27,7 @@
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/UniquePaintParamsID.h"
 #include "src/gpu/graphite/precompile/PaintOptionsPriv.h"
+#include "src/gpu/graphite/precompile/PrecompileColorFiltersPriv.h"
 
 namespace {
 
@@ -62,11 +63,10 @@ void compile(const RendererProvider* rendererProvider,
 
             UniquePaintParamsID paintID = s->performsShading() ? uniqueID
                                                                : UniquePaintParamsID::Invalid();
-            GraphicsPipelineDesc pipelineDesc(s->renderStepID(), paintID);
 
             sk_sp<GraphicsPipeline> pipeline = resourceProvider->findOrCreateGraphicsPipeline(
                     keyContext.rtEffectDict(),
-                    pipelineDesc,
+                    { s->renderStepID(), paintID },
                     renderPassDesc,
                     PipelineCreationFlags::kForPrecompilation);
             if (!pipeline) {
@@ -87,6 +87,8 @@ void Precompile(PrecompileContext* precompileContext,
                 SkSpan<const RenderPassProperties> renderPassProperties) {
 
     ShaderCodeDictionary* dict = precompileContext->priv().shaderCodeDictionary();
+    const RendererProvider* rendererProvider = precompileContext->priv().rendererProvider();
+    ResourceProvider* resourceProvider = precompileContext->priv().resourceProvider();
     const Caps* caps = precompileContext->priv().caps();
 
     auto rtEffectDict = std::make_unique<RuntimeEffectDictionary>();
@@ -129,60 +131,134 @@ void Precompile(PrecompileContext* precompileContext,
                                          caps->getDstReadStrategy());
 
             SkColorInfo ci(rpp.fDstCT, kPremul_SkAlphaType, rpp.fDstCS);
-            KeyContext keyContext(caps, dict, rtEffectDict.get(), ci);
+
+            // The PipelineDataGatherer and FloatStorageManager are only used to accumulate uniform
+            // data. In the pre-compile case we don't need to record the uniform data but the
+            // process of generating it is required to create the correct key.
+            FloatStorageManager floatStorageManager;
+            PipelineDataGatherer gatherer(Layout::kMetal);
+            PaintParamsKeyBuilder builder(dict);
+            KeyContext keyContext(caps, &floatStorageManager, &builder, &gatherer, dict,
+                                  rtEffectDict.get(), ci);
 
             for (Coverage coverage : { Coverage::kNone, Coverage::kSingleChannel }) {
                 PrecompileCombinations(
-                        precompileContext->priv().rendererProvider(),
-                        precompileContext->priv().resourceProvider(),
+                        rendererProvider,
+                        resourceProvider,
                         options, keyContext,
                         static_cast<DrawTypeFlags>(drawTypes & ~(DrawTypeFlags::kBitmapText_Color |
                                                                  DrawTypeFlags::kBitmapText_LCD |
                                                                  DrawTypeFlags::kSDFText_LCD |
-                                                                 DrawTypeFlags::kDrawVertices)),
+                                                                 DrawTypeFlags::kDrawVertices |
+                                                                 DrawTypeFlags::kDropShadows)),
                         /* withPrimitiveBlender= */ false,
                         coverage,
                         renderPassDesc);
             }
 
+            if (drawTypes & DrawTypeFlags::kNonSimpleShape) {
+                // Special case handling to pick up the:
+                //     "CoverBoundsRenderStep[InverseCover] + (empty)"
+                // pipelines.
+                const RenderStep* renderStep =
+                    rendererProvider->lookup(RenderStep::RenderStepID::kCoverBounds_InverseCover);
+                sk_sp<GraphicsPipeline> pipeline = resourceProvider->findOrCreateGraphicsPipeline(
+                        keyContext.rtEffectDict(),
+                        { renderStep->renderStepID(), UniquePaintParamsID::Invalid() },
+                        renderPassDesc,
+                        PipelineCreationFlags::kForPrecompilation);
+                if (!pipeline) {
+                    SKGPU_LOG_W("Failed to create \"CoverBoundsRenderStep[InverseCover] + (empty)\""
+                                " precompile Pipeline!");
+                }
+            }
+
             if (drawTypes & DrawTypeFlags::kBitmapText_Color) {
+                DrawTypeFlags reducedTypes =
+                        static_cast<DrawTypeFlags>(drawTypes & (DrawTypeFlags::kBitmapText_Color |
+                                                                DrawTypeFlags::kAnalyticClip));
                 // For color emoji text, shaders don't affect the final color
                 PaintOptions tmp = options;
                 tmp.setShaders({});
 
                 // ARGB text doesn't emit coverage and always has a primitive blender
-                PrecompileCombinations(precompileContext->priv().rendererProvider(),
-                                       precompileContext->priv().resourceProvider(),
+                PrecompileCombinations(rendererProvider,
+                                       resourceProvider,
                                        tmp,
                                        keyContext,
-                                       DrawTypeFlags::kBitmapText_Color,
+                                       reducedTypes,
                                        /* withPrimitiveBlender= */ true,
                                        Coverage::kNone,
                                        renderPassDesc);
             }
 
             if (drawTypes & (DrawTypeFlags::kBitmapText_LCD | DrawTypeFlags::kSDFText_LCD)) {
+                DrawTypeFlags reducedTypes =
+                        static_cast<DrawTypeFlags>(drawTypes & (DrawTypeFlags::kBitmapText_LCD |
+                                                                DrawTypeFlags::kSDFText_LCD |
+                                                                DrawTypeFlags::kAnalyticClip));
                 // LCD-based text always emits LCD coverage but never has primitiveBlenders
                 PrecompileCombinations(
-                        precompileContext->priv().rendererProvider(),
-                        precompileContext->priv().resourceProvider(),
+                        rendererProvider,
+                        resourceProvider,
                         options, keyContext,
-                        static_cast<DrawTypeFlags>(drawTypes & (DrawTypeFlags::kBitmapText_LCD |
-                                                                DrawTypeFlags::kSDFText_LCD)),
+                        reducedTypes,
                         /* withPrimitiveBlender= */ false,
                         Coverage::kLCD,
                         renderPassDesc);
             }
 
             if (drawTypes & DrawTypeFlags::kDrawVertices) {
+                DrawTypeFlags reducedTypes =
+                        static_cast<DrawTypeFlags>(drawTypes & (DrawTypeFlags::kDrawVertices |
+                                                                DrawTypeFlags::kAnalyticClip));
                 // drawVertices w/ colors use a primitiveBlender while those w/o don't. It never
                 // emits coverage.
                 for (bool withPrimitiveBlender : { true, false }) {
-                    PrecompileCombinations(precompileContext->priv().rendererProvider(),
-                                           precompileContext->priv().resourceProvider(),
+                    PrecompileCombinations(rendererProvider,
+                                           resourceProvider,
                                            options, keyContext,
-                                           DrawTypeFlags::kDrawVertices,
+                                           reducedTypes,
                                            withPrimitiveBlender,
+                                           Coverage::kNone,
+                                           renderPassDesc);
+                }
+            }
+
+            if (drawTypes & DrawTypeFlags::kDropShadows) {
+                DrawTypeFlags reducedTypes =
+                        static_cast<DrawTypeFlags>(drawTypes & (DrawTypeFlags::kDropShadows |
+                                                                DrawTypeFlags::kAnalyticClip));
+
+                PaintOptions newOptions;
+                newOptions.setBlendModes({ SkBlendMode::kSrcOver });
+
+                // Analytic
+                {
+                    PrecompileCombinations(rendererProvider,
+                                           resourceProvider,
+                                           newOptions, keyContext,
+                                           reducedTypes,
+                                           /* withPrimitiveBlender= */ false,
+                                           Coverage::kSingleChannel,
+                                           renderPassDesc);
+                }
+
+                // Geometric
+                {
+                    sk_sp<PrecompileColorFilter> cf = PrecompileColorFilters::Compose(
+                            { PrecompileColorFilters::Blend({ SkBlendMode::kModulate }) },
+                            { PrecompileColorFiltersPriv::Gaussian() });
+
+                    newOptions.setColorFilters({ std::move(cf) });
+                    newOptions.priv().setPrimitiveBlendMode(SkBlendMode::kDst);
+                    newOptions.priv().setSkipColorXform(true);
+
+                    PrecompileCombinations(rendererProvider,
+                                           resourceProvider,
+                                           newOptions, keyContext,
+                                           reducedTypes,
+                                           /* withPrimitiveBlender= */ true,
                                            Coverage::kNone,
                                            renderPassDesc);
                 }
@@ -203,13 +279,8 @@ void PrecompileCombinations(const RendererProvider* rendererProvider,
         return;
     }
 
-    // Since the precompilation path's uniforms aren't used and don't change the key,
-    // the exact layout doesn't matter
-    PipelineDataGatherer gatherer(Layout::kMetal);
-
     options.priv().buildCombinations(
         keyContext,
-        &gatherer,
         drawTypes,
         withPrimitiveBlender,
         coverage,

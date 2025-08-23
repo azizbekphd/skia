@@ -160,7 +160,7 @@ bool GrTriangulator::Line::intersect(const Line& other, SkPoint* point) const {
     double scale = 1.0 / denom;
     point->fX = double_to_clamped_scalar((fB * other.fC - other.fB * fC) * scale);
     point->fY = double_to_clamped_scalar((other.fA * fC - fA * other.fC) * scale);
-     round(point);
+    round(point);
     return point->isFinite();
 }
 
@@ -181,7 +181,7 @@ static bool edge_line_needs_recursion(const SkPoint& p0, const SkPoint& p1) {
 
 static bool recursive_edge_intersect(const Line& u, SkPoint u0, SkPoint u1,
                                      const Line& v, SkPoint v0, SkPoint v1,
-                                     SkPoint* p) {
+                                     SkPoint* p, double* s, double* t) {
     // First check if the bounding boxes of [u0,u1] intersects [v0,v1]. If they do not, then the
     // two line segments cannot intersect in their domain (even if the lines themselves might).
     // - don't use SkRect::intersect since the vertices aren't sorted and horiz/vertical lines
@@ -212,22 +212,27 @@ static bool recursive_edge_intersect(const Line& u, SkPoint u0, SkPoint u1,
         return false;
     }
 
-    double s = sNumer / denom;
-    double t = tNumer / denom;
-    SkASSERT(s >= 0.0 && s <= 1.0 && t >= 0.0 && t <= 1.0);
+    *s = sNumer / denom;
+    *t = tNumer / denom;
+    SkASSERT(*s >= 0.0 && *s <= 1.0 && *t >= 0.0 && *t <= 1.0);
 
     const bool uNeedsSplit = edge_line_needs_recursion(u0, u1);
     const bool vNeedsSplit = edge_line_needs_recursion(v0, v1);
     if (!uNeedsSplit && !vNeedsSplit) {
-        p->fX = double_to_clamped_scalar(u0.fX - s * u.fB);
-        p->fY = double_to_clamped_scalar(u0.fY + s * u.fA);
+        p->fX = double_to_clamped_scalar(u0.fX - (*s) * u.fB);
+        p->fY = double_to_clamped_scalar(u0.fY + (*s) * u.fA);
         return true;
     } else {
+        double sScale = 1.0, sShift = 0.0;
+        double tScale = 1.0, tShift = 0.0;
+
         if (uNeedsSplit) {
             SkPoint uM = {(float) (0.5 * u0.fX + 0.5 * u1.fX),
                           (float) (0.5 * u0.fY + 0.5 * u1.fY)};
-            if (s >= 0.5) {
+            sScale = 0.5;
+            if (*s >= 0.5) {
                 u0 = uM;
+                sShift = 0.5;
             } else {
                 u1 = uM;
             }
@@ -235,15 +240,25 @@ static bool recursive_edge_intersect(const Line& u, SkPoint u0, SkPoint u1,
         if (vNeedsSplit) {
             SkPoint vM = {(float) (0.5 * v0.fX + 0.5 * v1.fX),
                           (float) (0.5 * v0.fY + 0.5 * v1.fY)};
-            if (t >= 0.5) {
+            tScale = 0.5;
+            if (*t >= 0.5) {
                 v0 = vM;
+                tShift = 0.5;
             } else {
                 v1 = vM;
             }
         }
 
         // Just recompute both lines, even if only one was split; we're already in a slow path.
-        return recursive_edge_intersect(Line(u0, u1), u0, u1, Line(v0, v1), v0, v1, p);
+        if (recursive_edge_intersect(Line(u0, u1), u0, u1, Line(v0, v1), v0, v1, p, s, t)) {
+            // Adjust s and t back to full range
+            *s = sScale * (*s) + sShift;
+            *t = tScale * (*t) + tShift;
+            return true;
+        } else {
+            // False positive
+            return false;
+        }
     }
 }
 
@@ -257,60 +272,14 @@ bool GrTriangulator::Edge::intersect(const Edge& other, SkPoint* p, uint8_t* alp
         return false;
     }
 
-    // Originally, line segment AB and line segment CD did not intersect.
-    // However, line segment AB intersected with another line segment at point E,
-    // causing AB to be split into AE and EB. Due to precision loss from converting double to float,
-    // the split segments AE or EB might end up intersecting with CD.
-    // This precision error leads to incorrect calculations of the relative positions of the line
-    // segments. Therefore, the idea here is to use the original segments for computation rather
-    // than the split ones. If the two original segments do not intersect, then the split segments
-    // will also not intersect.
-    // If the original segments do intersect, further checks can be performed to determine whether
-    // the intersection lies within the split segments.
-    if (fOriginalSegment || other.fOriginalSegment) {
-        // When a line segment has fOriginalSegment, it is also necessary to check whether the
-        // original segment of the split edge shares an endpoint. If it does, they do not intersect.
-        if (fOriginalSegment && other.fOriginalSegment && (
-            fOriginalSegment->isEndpoint(other.fOriginalSegment->fTop) ||
-            fOriginalSegment->isEndpoint(other.fOriginalSegment->fBottom))) {
-            return false;
-        }
-
-        if (fOriginalSegment && (
-            fOriginalSegment->isEndpoint(other.fTop) ||
-            fOriginalSegment->isEndpoint(other.fBottom))) {
-            return false;
-        }
-
-        if (other.fOriginalSegment && (
-            other.fOriginalSegment->isEndpoint(fTop) ||
-            other.fOriginalSegment->isEndpoint(fBottom))) {
-            return false;
-        }
-    }
-
-    const Line* lhsLine = fOriginalSegment ? &fOriginalSegment->fLine : &fLine;
-    const SkPoint* lhsTopPoint = fOriginalSegment ? &fOriginalSegment->fTop->fPoint : &fTop->fPoint;
-    const SkPoint* lhsBottomPoint = fOriginalSegment ? &fOriginalSegment->fBottom->fPoint
-                                                     : &fBottom->fPoint;
-    const Line* rhsLine = other.fOriginalSegment ? &other.fOriginalSegment->fLine : &other.fLine;
-    const SkPoint* rhsTopPoint = other.fOriginalSegment ? &other.fOriginalSegment->fTop->fPoint
-                                                        : &other.fTop->fPoint;
-    const SkPoint* rhsBottomPoint = other.fOriginalSegment
-                                    ? &other.fOriginalSegment->fBottom->fPoint
-                                    : &other.fBottom->fPoint;
+    double s, t; // needed to interpolate vertex alpha
     const bool intersects = recursive_edge_intersect(
-            *lhsLine, *lhsTopPoint, *lhsBottomPoint,
-            *rhsLine, *rhsTopPoint, *rhsBottomPoint,
-            p);
+            fLine, fTop->fPoint, fBottom->fPoint,
+            other.fLine, other.fTop->fPoint, other.fBottom->fPoint,
+            p, &s, &t);
     if (!intersects) {
         return false;
     }
-
-    double s = pointTo(*p);
-    double t = other.pointTo(*p);
-    if ((s < 0) || (s > 1.0) || (t < 0) || (t > 1.0))
-        return false;
 
     if (alpha) {
         if (fType == EdgeType::kInner || other.fType == EdgeType::kInner) {
@@ -578,68 +547,65 @@ void GrTriangulator::generateCubicPoints(const SkPoint& p0, const SkPoint& p1, c
 void GrTriangulator::pathToContours(float tolerance, const SkRect& clipBounds,
                                     VertexList* contours, bool* isLinear) const {
     SkScalar toleranceSqd = tolerance * tolerance;
-    SkPoint pts[4];
     *isLinear = true;
     VertexList* contour = contours;
-    SkPath::Iter iter(fPath, false);
     if (fPath.isInverseFillType()) {
-        SkPoint quad[4];
-        clipBounds.toQuad(quad);
+        const std::array<SkPoint, 4> quad = clipBounds.toQuad();
         for (int i = 3; i >= 0; i--) {
             this->appendPointToContour(quad[i], contours);
         }
         contour++;
     }
     SkAutoConicToQuads converter;
-    SkPath::Verb verb;
-    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
-        switch (verb) {
-            case SkPath::kConic_Verb: {
+    SkPath::Iter iter(fPath, false);
+    while (auto rec = iter.next()) {
+        SkSpan<const SkPoint> pts = rec->fPoints;
+        switch (rec->fVerb) {
+            case SkPathVerb::kConic: {
                 *isLinear = false;
                 if (toleranceSqd == 0) {
                     this->appendPointToContour(pts[2], contour);
                     break;
                 }
-                SkScalar weight = iter.conicWeight();
-                const SkPoint* quadPts = converter.computeQuads(pts, weight, toleranceSqd);
+                const SkPoint* quadPts = converter.computeQuads(pts.data(), rec->conicWeight(),
+                                                                toleranceSqd);
                 for (int i = 0; i < converter.countQuads(); ++i) {
                     this->appendQuadraticToContour(quadPts, toleranceSqd, contour);
                     quadPts += 2;
                 }
                 break;
             }
-            case SkPath::kMove_Verb:
+            case SkPathVerb::kMove:
                 if (contour->fHead) {
                     contour++;
                 }
                 this->appendPointToContour(pts[0], contour);
                 break;
-            case SkPath::kLine_Verb: {
+            case SkPathVerb::kLine: {
                 this->appendPointToContour(pts[1], contour);
                 break;
             }
-            case SkPath::kQuad_Verb: {
+            case SkPathVerb::kQuad: {
                 *isLinear = false;
                 if (toleranceSqd == 0) {
                     this->appendPointToContour(pts[2], contour);
                     break;
                 }
-                this->appendQuadraticToContour(pts, toleranceSqd, contour);
+                this->appendQuadraticToContour(pts.data(), toleranceSqd, contour);
                 break;
             }
-            case SkPath::kCubic_Verb: {
+            case SkPathVerb::kCubic: {
                 *isLinear = false;
                 if (toleranceSqd == 0) {
                     this->appendPointToContour(pts[3], contour);
                     break;
                 }
-                int pointsLeft = GrPathUtils::cubicPointCount(pts, tolerance);
+                int pointsLeft = GrPathUtils::cubicPointCount(pts.data(), tolerance);
                 this->generateCubicPoints(pts[0], pts[1], pts[2], pts[3], toleranceSqd, contour,
                                           pointsLeft);
                 break;
             }
-            case SkPath::kClose_Verb:
-            case SkPath::kDone_Verb:
+            case SkPathVerb::kClose:
                 break;
         }
     }
@@ -791,17 +757,22 @@ static bool rewind(EdgeList* activeEdges, Vertex** current, Vertex* dst, const C
         }
         Edge* leftEdge = v->fLeftEnclosingEdge;
         for (Edge* e = v->fFirstEdgeAbove; e; e = e->fNextEdgeAbove) {
+            if (!e) {
+                return false;
+            }
             if (!activeEdges->insert(e, leftEdge)) {
                 return false;
             }
             leftEdge = e;
             Vertex* top = e->fTop;
-            if (!top) {
+            if (!top ||
+                (top->fLeftEnclosingEdge && !top->fLeftEnclosingEdge->hasTopAndBottom()) ||
+                (top->fRightEnclosingEdge && !top->fRightEnclosingEdge->hasTopAndBottom())) {
                 return false;
             }
             if (c.sweep_lt(top->fPoint, dst->fPoint) &&
-                ((top->fLeftEnclosingEdge && !top->fLeftEnclosingEdge->isLeftOf(*e->fTop)) ||
-                 (top->fRightEnclosingEdge && !top->fRightEnclosingEdge->isRightOf(*e->fTop)))) {
+                ((top->fLeftEnclosingEdge && !top->fLeftEnclosingEdge->isLeftOf(*top)) ||
+                 (top->fRightEnclosingEdge && !top->fRightEnclosingEdge->isRightOf(*top)))) {
                 dst = top;
             }
         }
@@ -905,13 +876,28 @@ bool GrTriangulator::setBottom(Edge* edge, Vertex* v, EdgeList* activeEdges, Ver
     return this->mergeCollinearEdges(edge, activeEdges, current, c);
 }
 
+/*
+ * NOTE: Also used in mergeEdgesBelow()
+ * Merges two adjacent, collinear edges. This is a complex operation with two main cases:
+ *
+ * 1. Coincident endpoints: If the edges share the exact same top/bottom vertex, one edge's winding
+ *    is absorbed into the other. The now-unused "zombie" edge is fully disconnected and also
+ *    explicitly removed from the activeEdges list to prevent state corruption that can lead to
+ *    null-pointer dereferences (b/419397557, b/421959607).
+ *
+ * 2. Non-coincident (overlapping) endpoints: One edge is shortened to meet the endpoint of the
+ *    other by modifying it in-place. This is a fragile operation that relies on the stability of
+ *    the floating point comparisons to succeed. To combat this, the geometric checks (`isLeftOf`,
+ *    etc.) use an adaptive, per-edge epsilon. This tries to ensure that the decision to merge is
+ *    mathematically sound, even with pathological floating-point coordinates.
+ */
 bool GrTriangulator::mergeEdgesAbove(Edge* edge, Edge* other, EdgeList* activeEdges,
                                      Vertex** current, const Comparator& c) const {
     if (!edge || !other) {
         return false;
     }
     if (coincident(edge->fTop->fPoint, other->fTop->fPoint)) {
-        TESS_LOG("merging coincident above edges (%1.9g, %1.9g) -> (%1.9g, %1.9g)\n",
+        TESS_LOG("merging coincident above edges (%g, %g) -> (%g, %g)\n",
                  edge->fTop->fPoint.fX, edge->fTop->fPoint.fY,
                  edge->fBottom->fPoint.fX, edge->fBottom->fPoint.fY);
         if (!rewind(activeEdges, current, edge->fTop, c)) {
@@ -919,6 +905,9 @@ bool GrTriangulator::mergeEdgesAbove(Edge* edge, Edge* other, EdgeList* activeEd
         }
         other->fWinding += edge->fWinding;
         edge->disconnect();
+        if (activeEdges) {
+            activeEdges->remove(edge);
+        }
         edge->fTop = edge->fBottom = nullptr;
     } else if (c.sweep_lt(edge->fTop->fPoint, other->fTop->fPoint)) {
         if (!rewind(activeEdges, current, edge->fTop, c)) {
@@ -940,13 +929,14 @@ bool GrTriangulator::mergeEdgesAbove(Edge* edge, Edge* other, EdgeList* activeEd
     return true;
 }
 
+// NOTE: See mergeEdgesAbove() comment
 bool GrTriangulator::mergeEdgesBelow(Edge* edge, Edge* other, EdgeList* activeEdges,
                                      Vertex** current, const Comparator& c) const {
     if (!edge || !other) {
         return false;
     }
     if (coincident(edge->fBottom->fPoint, other->fBottom->fPoint)) {
-        TESS_LOG("merging coincident below edges (%1.9g, %1.9g) -> (%1.9g, %1.9g)\n",
+        TESS_LOG("merging coincident below edges (%g, %g) -> (%g, %g)\n",
                  edge->fTop->fPoint.fX, edge->fTop->fPoint.fY,
                  edge->fBottom->fPoint.fX, edge->fBottom->fPoint.fY);
         if (!rewind(activeEdges, current, edge->fTop, c)) {
@@ -954,6 +944,9 @@ bool GrTriangulator::mergeEdgesBelow(Edge* edge, Edge* other, EdgeList* activeEd
         }
         other->fWinding += edge->fWinding;
         edge->disconnect();
+        if (activeEdges) {
+            activeEdges->remove(edge);
+        }
         edge->fTop = edge->fBottom = nullptr;
     } else if (c.sweep_lt(edge->fBottom->fPoint, other->fBottom->fPoint)) {
         if (!rewind(activeEdges, current, other->fTop, c)) {
@@ -1033,14 +1026,10 @@ GrTriangulator::BoolFail GrTriangulator::splitEdge(
     if (!edge->fTop || !edge->fBottom || v == edge->fTop || v == edge->fBottom) {
         return BoolFail::kFalse;
     }
-    TESS_LOG("splitting edge (%1.9g -> %1.9g) at vertex %g (%1.9g, %1.9g)\n",
+    TESS_LOG("splitting edge (%g -> %g) at vertex %g (%g, %g)\n",
              edge->fTop->fID, edge->fBottom->fID, v->fID, v->fPoint.fX, v->fPoint.fY);
     Vertex* top;
     Vertex* bottom;
-    Vertex* origTop = edge->fTop;
-    Vertex* origBottom = edge->fBottom;
-    Segment* origSegment = fAlloc->make<Segment>(origTop, origBottom);
-    bool reverseWinding = true;
     int winding = edge->fWinding;
     // Theoretically, and ideally, the edge betwee p0 and p1 is being split by v, and v is "between"
     // the segment end points according to c. This is equivalent to p0 < v < p1.  Unfortunately, if
@@ -1050,7 +1039,6 @@ GrTriangulator::BoolFail GrTriangulator::splitEdge(
         // the new edge so that it winds as if it were p0->v.
         top = v;
         bottom = edge->fTop;
-        edge->fOriginalSegment = origSegment;
         winding *= -1;
         if (!this->setTop(edge, v, activeEdges, current, c)) {
             return BoolFail::kFail;
@@ -1060,7 +1048,6 @@ GrTriangulator::BoolFail GrTriangulator::splitEdge(
         // the new edge so that it winds as if it were v->p1.
         top = edge->fBottom;
         bottom = v;
-        edge->fOriginalSegment = origSegment;
         winding *= -1;
         if (!this->setBottom(edge, v, activeEdges, current, c)) {
             return BoolFail::kFail;
@@ -1070,17 +1057,11 @@ GrTriangulator::BoolFail GrTriangulator::splitEdge(
         // is valid for both edges.
         top = v;
         bottom = edge->fBottom;
-        edge->fOriginalSegment = origSegment;
-        reverseWinding = false;
         if (!this->setBottom(edge, v, activeEdges, current, c)) {
             return BoolFail::kFail;
         }
     }
-
     Edge* newEdge = this->allocateEdge(top, bottom, winding, edge->fType);
-    newEdge->fOriginalSegment = reverseWinding ? fAlloc->make<Segment>(origBottom, origTop)
-                                               : origSegment;
-
     newEdge->insertBelow(top, c);
     newEdge->insertAbove(bottom, c);
     fMergeCollinearStackCount = 0;
@@ -1156,7 +1137,7 @@ Edge* GrTriangulator::makeConnectingEdge(Vertex* prev, Vertex* next, EdgeType ty
 
 void GrTriangulator::mergeVertices(Vertex* src, Vertex* dst, VertexList* mesh,
                                    const Comparator& c) const {
-    TESS_LOG("found coincident verts at %1.9g, %1.9g; merging %g into %g\n",
+    TESS_LOG("found coincident verts at %g, %g; merging %g into %g\n",
              src->fPoint.fX, src->fPoint.fY, src->fID, dst->fID);
     dst->fAlpha = std::max(src->fAlpha, dst->fAlpha);
     if (src->fPartner) {
@@ -1242,9 +1223,7 @@ void GrTriangulator::computeBisector(Edge* edge1, Edge* edge2, Vertex* v) const 
     if (line1.intersect(line2, &p)) {
         uint8_t alpha = edge1->fType == EdgeType::kOuter ? 255 : 0;
         v->fPartner = fAlloc->make<Vertex>(p, alpha);
-        TESS_LOG(
-            "computed bisector (%1.9g,%1.9g) alpha %d for vertex %g\n", p.fX, p.fY, alpha, v->fID
-        );
+        TESS_LOG("computed bisector (%g,%g) alpha %d for vertex %g\n", p.fX, p.fY, alpha, v->fID);
     }
 }
 
@@ -1263,7 +1242,7 @@ GrTriangulator::BoolFail GrTriangulator::checkForIntersection(
     }
     if (left->intersect(*right, &p, &alpha) && p.isFinite()) {
         Vertex* v;
-        TESS_LOG("found intersection, pt is (%1.9g, %1.9g)\n", p.fX, p.fY);
+        TESS_LOG("found intersection, pt is %g, %g\n", p.fX, p.fY);
         Vertex* top = *current;
         // If the intersection point is above the current vertex, rewind to the vertex above the
         // intersection.
@@ -1326,14 +1305,14 @@ void GrTriangulator::sanitizeContours(VertexList* contours, int contourCnt) cons
             Vertex* next = v->fNext;
             Vertex* nextWrap = next ? next : contour->fHead;
             if (coincident(prev->fPoint, v->fPoint)) {
-                TESS_LOG("vertex %1.9g,%1.9g coincident; removing\n", v->fPoint.fX, v->fPoint.fY);
+                TESS_LOG("vertex %g,%g coincident; removing\n", v->fPoint.fX, v->fPoint.fY);
                 contour->remove(v);
             } else if (!v->fPoint.isFinite()) {
-                TESS_LOG("vertex %1.9g,%1.9g non-finite; removing\n", v->fPoint.fX, v->fPoint.fY);
+                TESS_LOG("vertex %g,%g non-finite; removing\n", v->fPoint.fX, v->fPoint.fY);
                 contour->remove(v);
             } else if (!fPreserveCollinearVertices &&
                        Line(prev->fPoint, nextWrap->fPoint).dist(v->fPoint) == 0.0) {
-                TESS_LOG("vertex %1.9g,%1.9g collinear; removing\n", v->fPoint.fX, v->fPoint.fY);
+                TESS_LOG("vertex %g,%g collinear; removing\n", v->fPoint.fX, v->fPoint.fY);
                 contour->remove(v);
             } else {
                 prev = v;
@@ -1445,11 +1424,9 @@ static void merge_sort(VertexList* vertices) {
 #if TRIANGULATOR_LOGGING
 void VertexList::dump() const {
     for (Vertex* v = fHead; v; v = v->fNext) {
-        TESS_LOG(
-            "vertex %g (%1.9g, %1.9g) alpha %d", v->fID, v->fPoint.fX, v->fPoint.fY, v->fAlpha
-        );
+        TESS_LOG("vertex %g (%g, %g) alpha %d", v->fID, v->fPoint.fX, v->fPoint.fY, v->fAlpha);
         if (Vertex* p = v->fPartner) {
-            TESS_LOG(", partner %g (%1.9g, %1.9g) alpha %d\n",
+            TESS_LOG(", partner %g (%g, %g) alpha %d\n",
                     p->fID, p->fPoint.fX, p->fPoint.fY, p->fAlpha);
         } else {
             TESS_LOG(", null partner\n");
@@ -1536,7 +1513,7 @@ GrTriangulator::SimplifyResult GrTriangulator::simplify(VertexList* mesh,
         Edge* rightEnclosingEdge;
         bool restartChecks;
         do {
-            TESS_LOG("\nvertex %g: (%1.9g,%1.9g), alpha %d\n",
+            TESS_LOG("\nvertex %g: (%g,%g), alpha %d\n",
                      v->fID, v->fPoint.fX, v->fPoint.fY, v->fAlpha);
             restartChecks = false;
             FindEnclosingEdges(*v, activeEdges, &leftEnclosingEdge, &rightEnclosingEdge);
@@ -1615,9 +1592,7 @@ std::tuple<Poly*, bool> GrTriangulator::tessellate(const VertexList& vertices, c
             continue;
         }
 #if TRIANGULATOR_LOGGING
-        TESS_LOG(
-            "\nvertex %g: (%1.9g,%1.9g), alpha %d\n", v->fID, v->fPoint.fX, v->fPoint.fY, v->fAlpha
-        );
+        TESS_LOG("\nvertex %g: (%g,%g), alpha %d\n", v->fID, v->fPoint.fX, v->fPoint.fY, v->fAlpha);
 #endif
         Edge* leftEnclosingEdge;
         Edge* rightEnclosingEdge;
@@ -1800,23 +1775,21 @@ static int get_contour_count(const SkPath& path, SkScalar tolerance) {
     bool hasPoints = false;
 
     SkPath::Iter iter(path, false);
-    SkPath::Verb verb;
-    SkPoint pts[4];
     bool first = true;
-    while ((verb = iter.next(pts)) != SkPath::kDone_Verb) {
-        switch (verb) {
-            case SkPath::kMove_Verb:
+    while (auto rec = iter.next()) {
+        switch (rec->fVerb) {
+            case SkPathVerb::kMove:
                 if (!first) {
                     ++contourCnt;
                 }
                 [[fallthrough]];
-            case SkPath::kLine_Verb:
-            case SkPath::kConic_Verb:
-            case SkPath::kQuad_Verb:
-            case SkPath::kCubic_Verb:
+            case SkPathVerb::kLine:
+            case SkPathVerb::kConic:
+            case SkPathVerb::kQuad:
+            case SkPathVerb::kCubic:
                 hasPoints = true;
                 break;
-            default:
+            case SkPathVerb::kClose:
                 break;
         }
         first = false;

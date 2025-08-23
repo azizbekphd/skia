@@ -586,8 +586,8 @@ static std::unique_ptr<GrFragmentProcessor> make_shader_fp(const SkCoordClampSha
 static std::unique_ptr<GrFragmentProcessor> make_shader_fp(const SkCTMShader* shader,
                                                            const GrFPArgs& args,
                                                            const SkShaders::MatrixRec& mRec) {
-    SkMatrix ctmInv;
-    if (!shader->ctm().invert(&ctmInv)) {
+    auto ctmInv = shader->ctm().invert();
+    if (!ctmInv) {
         return nullptr;
     }
 
@@ -599,7 +599,7 @@ static std::unique_ptr<GrFragmentProcessor> make_shader_fp(const SkCTMShader* sh
     // In order for the shader to be evaluated with the original CTM, we explicitly evaluate it
     // at sk_FragCoord, and pass that through the inverse of the original CTM. This avoids requiring
     // local coords for the shader and mapping from the draw's local to device and then back.
-    return GrFragmentProcessor::DeviceSpace(GrMatrixEffect::Make(ctmInv, std::move(base)));
+    return GrFragmentProcessor::DeviceSpace(GrMatrixEffect::Make(*ctmInv, std::move(base)));
 }
 
 static std::unique_ptr<GrFragmentProcessor> make_shader_fp(const SkEmptyShader* shader,
@@ -834,14 +834,20 @@ static std::unique_ptr<GrFragmentProcessor> make_shader_fp(const SkWorkingColorS
                                                            const GrFPArgs& args,
                                                            const SkShaders::MatrixRec& mRec) {
     const GrColorInfo* dstInfo = args.fDstColorInfo;
+    SkAlphaType dstAT = dstInfo->alphaType();
     sk_sp<SkColorSpace> dstCS = dstInfo->refColorSpace();
     if (!dstCS) {
         dstCS = SkColorSpace::MakeSRGB();
     }
 
-    GrColorInfo dst     = {dstInfo->colorType(), dstInfo->alphaType(), dstCS},
-                working = {dstInfo->colorType(), dstInfo->alphaType(), shader->workingSpace()};
-    GrFPArgs workingArgs(args.fSurfaceDrawContext, &working, args.fSurfaceProps, args.fScope);
+
+    auto [inputCS, outputCS, workingAT] = shader->workingSpace(dstCS, dstAT);
+
+    GrColorInfo dst    = {dstInfo->colorType(), dstAT,     dstCS},
+                input  = {dstInfo->colorType(), workingAT, inputCS},
+                output = {dstInfo->colorType(), workingAT, outputCS};
+
+    GrFPArgs workingArgs(args.fSurfaceDrawContext, &input, args.fSurfaceProps, args.fScope);
 
     auto childFP = Make(shader->shader().get(), workingArgs, mRec);
     if (!childFP) {
@@ -849,9 +855,10 @@ static std::unique_ptr<GrFragmentProcessor> make_shader_fp(const SkWorkingColorS
     }
 
     auto childWithWorkingInput = GrFragmentProcessor::Compose(
-            std::move(childFP), GrColorSpaceXformEffect::Make(nullptr, dst, working));
-
-    return GrColorSpaceXformEffect::Make(std::move(childWithWorkingInput), working, dst);
+            std::move(childFP), GrColorSpaceXformEffect::Make(nullptr, dst, input));
+    // Assuming that childFP operates on inputCS/workingAT values and returns outputCS/workingAT
+    // values, then we only need to transform from output to dst.
+    return GrColorSpaceXformEffect::Make(std::move(childWithWorkingInput), output, dst);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////

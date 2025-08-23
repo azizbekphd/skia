@@ -63,7 +63,7 @@ BitmapTextRenderStep::BitmapTextRenderStep(skgpu::MaskFormat variant)
                                    {"deviceToLocal"     , SkSLType::kFloat4x4},
                                    {"atlasSizeInv"      , SkSLType::kFloat2}},
                      PrimitiveType::kTriangleStrip,
-                     kDirectDepthGEqualPass,
+                     kDirectDepthLEqualPass,
                      /*staticAttrs=*/ {},
                      /*appendAttrs=*/
                      {{"size", VertexAttribType::kUShort2, SkSLType::kUShort2},
@@ -152,6 +152,8 @@ const char* BitmapTextRenderStep::fragmentCoverageSkSL() const {
                                                     "int(maskFormat));";
 }
 
+bool BitmapTextRenderStep::usesUniformsInFragmentSkSL() const { return false; }
+
 void BitmapTextRenderStep::writeVertices(DrawWriter* dw,
                                          const DrawParams& params,
                                          skvx::uint2 ssboIndices) const {
@@ -168,6 +170,7 @@ void BitmapTextRenderStep::writeVertices(DrawWriter* dw,
 
 void BitmapTextRenderStep::writeUniformsAndTextures(const DrawParams& params,
                                                     PipelineDataGatherer* gatherer) const {
+    SkDEBUGCODE(gatherer->checkRewind());
     SkDEBUGCODE(UniformExpectationsValidator uev(gatherer, this->uniforms());)
 
     const SubRunData& subRunData = params.geometry().subRunData();

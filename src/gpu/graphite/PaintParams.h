@@ -20,6 +20,7 @@ namespace skgpu::graphite {
 
 class DrawContext;
 class KeyContext;
+class FloatStorageManager;
 class PaintParamsKeyBuilder;
 class PipelineDataGatherer;
 class Recorder;
@@ -67,20 +68,18 @@ public:
     /** Converts an SkColor4f to the destination color space. */
     static SkColor4f Color4fPrepForDst(SkColor4f srgb, const SkColorInfo& dstColorInfo);
 
-    void toKey(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
+    void toKey(const KeyContext&) const;
 
     void notifyImagesInUse(Recorder*, DrawContext*) const;
 
 private:
-    void addPaintColorToKey(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
-    void handlePrimitiveColor(const KeyContext&,
-                              PaintParamsKeyBuilder*,
-                              PipelineDataGatherer*) const;
-    void handlePaintAlpha(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
-    void handleColorFilter(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
-    void handleDithering(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
-    void handleDstRead(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
-    void handleClipping(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*) const;
+    bool addPaintColorToKey(const KeyContext&) const;
+    bool handlePrimitiveColor(const KeyContext&) const;
+    bool handlePaintAlpha(const KeyContext&) const;
+    bool handleColorFilter(const KeyContext&) const;
+    bool handleDithering(const KeyContext&) const;
+    bool handleDstRead(const KeyContext&) const;
+    void handleClipping(const KeyContext&) const;
 
     SkColor4f            fColor;
     sk_sp<SkBlender>     fFinalBlender; // A nullptr here means SrcOver blending
@@ -98,13 +97,10 @@ private:
 };
 
 // Add a fixed blend mode node for a specific SkBlendMode.
-void AddFixedBlendMode(const KeyContext&,
-                       PaintParamsKeyBuilder*,
-                       PipelineDataGatherer*,
-                       SkBlendMode);
+void AddFixedBlendMode(const KeyContext&, SkBlendMode);
 // Add a blend mode node for an SkBlendMode that can vary
-void AddBlendMode(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*, SkBlendMode);
-void AddDitherBlock(const KeyContext&, PaintParamsKeyBuilder*, PipelineDataGatherer*, SkColorType);
+void AddBlendMode(const KeyContext&, SkBlendMode);
+void AddDitherBlock(const KeyContext&, SkColorType);
 
 } // namespace skgpu::graphite
 
