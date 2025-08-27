@@ -712,13 +712,6 @@ private:
     */
     bool interpolate(const SkPath& ending, SkScalar weight, SkPath* out) const;
 
-    /** Sets SkPathFillType, the rule used to fill SkPath. While there is no
-        check that ft is legal, values outside of SkPathFillType are not supported.
-    */
-    void setFillType(SkPathFillType ft) {
-        fFillType = SkToU8(ft);
-    }
-
     /** Replaces SkPathFillType with its inverse. The inverse of SkPathFillType describes the area
         unmodified by the original SkPathFillType.
     */
