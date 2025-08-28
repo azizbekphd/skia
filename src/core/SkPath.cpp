@@ -46,6 +46,7 @@
 #include <cstring>
 #include <limits.h>
 #include <utility>
+#include <vector>
 
 struct SkPath_Storage_Equivalent {
     void*    fPtr;
