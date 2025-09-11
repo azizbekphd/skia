@@ -90,6 +90,7 @@ var CanvasKit = {
   _MakePicture: function() {},
   _MakeRenderTargetII: function() {},
   _MakeRenderTargetWH: function() {},
+  _TextureFromImage: function() {},
   _computeTonalColors: function() {},
   _decodeAnimatedImage: function() {},
   _decodeImage: function() {},
