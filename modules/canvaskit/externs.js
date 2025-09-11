@@ -47,6 +47,7 @@ var CanvasKit = {
   /** @return {CanvasKit.Image} */
   MakeImageFromEncoded: function() {},
   MakeImageFromCanvasImageSource: function() {},
+  TextureFromImage: function() {},
   MakeOnScreenGLSurface: function() {},
   MakeRenderTarget: function() {},
   MakePicture: function() {},

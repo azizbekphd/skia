@@ -349,6 +349,10 @@ sk_sp<SkSurface> MakeRenderTarget(sk_sp<GrDirectContext> dContext, SimpleImageIn
                                                       true));
     return surface;
 }
+
+sk_sp<SkImage> TextureFromImage(sk_sp<GrDirectContext> dContext, const sk_sp<SkImage>& image) {
+    return SkImages::TextureFromImage(dContext.get(), image.get());
+}
 #endif // CK_ENABLE_WEBGL
 
 #ifdef CK_ENABLE_WEBGPU
@@ -1149,6 +1153,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
     function("_MakeOnScreenGLSurface", select_overload<sk_sp<SkSurface>(sk_sp<GrDirectContext>, int, int, sk_sp<SkColorSpace>, int, int)>(&MakeOnScreenGLSurface));
     function("_MakeRenderTargetWH", select_overload<sk_sp<SkSurface>(sk_sp<GrDirectContext>, int, int)>(&MakeRenderTarget));
     function("_MakeRenderTargetII", select_overload<sk_sp<SkSurface>(sk_sp<GrDirectContext>, SimpleImageInfo)>(&MakeRenderTarget));
+    function("_TextureFromImage", select_overload<sk_sp<SkImage>(sk_sp<GrDirectContext>, const sk_sp<SkImage>&)>(&TextureFromImage));
 #endif // CK_ENABLE_WEBGL
 
 #ifdef CK_ENABLE_WEBGPU
