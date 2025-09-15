@@ -33,6 +33,8 @@ ParagraphPainter::DecorationStyle::DecorationStyle(
         fPaint.setPathEffect(SkPathEffect::MakeCompose(
             SkDashPathEffect::Make(intervals.data(), intervals.size(), 0.0f),
             SkDiscretePathEffect::Make(0, 0)));
+    } else {
+      fPaint.setPathEffect(nullptr);
     }
 }
 
