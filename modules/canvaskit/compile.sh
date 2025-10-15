@@ -14,7 +14,7 @@ pushd $BASE_DIR/../..
 IS_OFFICIAL_BUILD="false"
 IS_DEBUG="false"
 EXTRA_CFLAGS="[]"
-EXTRA_LDFLAGS="[]"
+EXTRA_LDFLAGS="[\"-fsanitize=leak\"]"
 FORCE_TRACING="false"
 PROFILE_BUILD="false"
 # Tracing will be disabled in release/profiling unless this flag is seen. Tracing will
@@ -27,7 +27,7 @@ if [[ $@ == *debug_build* ]]; then
   echo "Building a Debug build"
   IS_DEBUG="true"
   EXTRA_CFLAGS="[\"-O1\"]"
-  EXTRA_LDFLAGS="[\"-sASSERTIONS=1\"]"
+  EXTRA_LDFLAGS="[\"-sASSERTIONS=1\",\"-fsanitize=leak\"]"
   IS_OFFICIAL_BUILD="false"
   BUILD_DIR=${BUILD_DIR:="out/canvaskit_wasm_debug"}
 elif [[ $@ == *profiling* ]]; then

@@ -73,6 +73,7 @@
 #include <emscripten.h>
 #include <emscripten/bind.h>
 #include <emscripten/html5.h>
+#include <sanitizer/lsan_interface.h>
 #include <vector>
 
 #if defined(CK_ENABLE_WEBGL) || defined(CK_ENABLE_WEBGPU)
@@ -1129,6 +1130,10 @@ public:
     }
 };
 
+void doRecoverableLeakCheck() {
+  __lsan_do_recoverable_leak_check();
+}
+
 EMSCRIPTEN_BINDINGS(Skia) {
     class_<SkWStreamWrapper>("WStream")
         .constructor<>()
@@ -1141,6 +1146,8 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("endPage", &SkPDFDocumentWrapper::endPage)
         .function("close", &SkPDFDocumentWrapper::close)
         .function("getStream", &SkPDFDocumentWrapper::getStream, emscripten::allow_raw_pointers());
+
+    function("_doRecoverableLeakCheck", &doRecoverableLeakCheck);
 
 #ifdef ENABLE_GPU
     constant("gpu", true);
