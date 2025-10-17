@@ -24,7 +24,7 @@ if [[ $@ == *debug* ]]; then
   echo "Building a Debug build"
   DEBUG=true
   EXTRA_CFLAGS="\"-DSK_DEBUG\", \"-DGPU_TEST_UTILS\", "
-  RELEASE_CONF="-O1 --js-opts 0 -s DEMANGLE_SUPPORT=1 -frtti -s ASSERTIONS=1 -s GL_ASSERTIONS=1 -g \
+  RELEASE_CONF="-O1 --js-opts 0 -s DEMANGLE_SUPPORT=1 -frtti -s ASSERTIONS=2 -s GL_ASSERTIONS=1 -g \
                 -DSK_DEBUG"
   BUILD_DIR=${BUILD_DIR:="out/tskit_debug"}
 else

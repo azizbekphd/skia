@@ -27,7 +27,7 @@ RELEASE_OPTS = [
 ]
 
 DEBUG_OPTS = [
-    "-s ASSERTIONS=1",  # Turn on assertions
+    "-s ASSERTIONS=2",  # Turn on assertions
     "--closure 0",  # Do not use closure
 
     # Building without optimizations causes Chrome to hit a limit when loading the WASM module with

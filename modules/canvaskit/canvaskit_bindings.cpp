@@ -73,8 +73,10 @@
 #include <emscripten.h>
 #include <emscripten/bind.h>
 #include <emscripten/html5.h>
-#include <sanitizer/lsan_interface.h>
 #include <vector>
+#ifdef SK_DEBUG
+#include <sanitizer/lsan_interface.h>
+#endif
 
 #if defined(CK_ENABLE_WEBGL) || defined(CK_ENABLE_WEBGPU)
 #define ENABLE_GPU
@@ -1131,7 +1133,9 @@ public:
 };
 
 void doRecoverableLeakCheck() {
+#ifdef SK_DEBUG
   __lsan_do_recoverable_leak_check();
+#endif
 }
 
 EMSCRIPTEN_BINDINGS(Skia) {

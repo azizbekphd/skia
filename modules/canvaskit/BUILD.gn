@@ -165,7 +165,7 @@ skia_wasm_lib("canvaskit") {
     ldflags += [
       "-O0",
       "-sDEMANGLE_SUPPORT=1",
-      "-sASSERTIONS=1",
+      "-sASSERTIONS=2",
       "-sGL_ASSERTIONS=1",
       "-g3",
       "--pre-js",
