@@ -486,9 +486,11 @@ var CanvasKit = {
     // public API (from C++ and JS bindings)
     Make: function() {},
     registerFont: function() {},
+    registerFontWithoutName: function() {},
 
     // private API
     _registerFont: function() {},
+    _registerFontWithoutName: function() {},
   },
 
   FontCollection: {

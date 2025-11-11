@@ -764,6 +764,10 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
       .class_function("Make", optional_override([]()-> sk_sp<para::TypefaceFontProvider> {
           return sk_make_sp<para::TypefaceFontProvider>();
       }))
+      .function("_registerFontWithoutName", optional_override([](para::TypefaceFontProvider& self,
+                                                      sk_sp<SkTypeface> typeface) {
+          self.registerTypeface(typeface);
+      }), allow_raw_pointers())
       .function("_registerFont", optional_override([](para::TypefaceFontProvider& self,
                                                       sk_sp<SkTypeface> typeface,
                                                       WASMPointerU8 familyPtr) {
