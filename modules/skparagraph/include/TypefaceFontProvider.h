@@ -16,6 +16,11 @@
 namespace skia {
 namespace textlayout {
 
+struct TypefaceAndMatchScore {
+    sk_sp<SkTypeface> fTypeface;
+    int fMatchScore;
+};
+
 class TypefaceFontStyleSet : public SkFontStyleSet {
 public:
     explicit TypefaceFontStyleSet(const SkString& familyName);
@@ -28,6 +33,9 @@ public:
     SkString getFamilyName() const { return fFamilyName; }
     SkString getAlias() const { return fAlias; }
     void appendTypeface(sk_sp<SkTypeface> typeface);
+    TypefaceAndMatchScore matchCharacter(const SkFontStyle&,
+                            const char* bcp47[], int bcp47Count,
+                            SkUnichar character) const;
 
 private:
     skia_private::TArray<sk_sp<SkTypeface>> fStyles;
@@ -48,10 +56,23 @@ public:
 
     sk_sp<SkFontStyleSet> onCreateStyleSet(int) const override;
     sk_sp<SkTypeface> onMatchFamilyStyle(const char familyName[], const SkFontStyle& pattern) const override;
-    sk_sp<SkTypeface> onMatchFamilyStyleCharacter(const char[], const SkFontStyle&,
-                                                  const char*[], int,
-                                                  SkUnichar) const override {
-        return nullptr;
+    sk_sp<SkTypeface> onMatchFamilyStyleCharacter(const char[], const SkFontStyle& style,
+                                                  const char* bcp47[], int bcp47Count,
+                                                  SkUnichar character) const override {
+        int bestScore = -1;
+        sk_sp<SkTypeface> bestMatch = nullptr;
+
+        for (auto tf = fRegisteredFamilies.begin(); tf != fRegisteredFamilies.end(); ++tf) {
+            TypefaceAndMatchScore matched = tf->second->matchCharacter(style, bcp47, bcp47Count, character);
+            if (matched.fMatchScore == 16) {
+                return matched.fTypeface;
+            }
+            if (matched.fMatchScore > bestScore || tf == fRegisteredFamilies.begin()) {
+                bestScore = matched.fMatchScore;
+                bestMatch = matched.fTypeface;
+            }
+        }
+        return bestMatch;
     }
 
     sk_sp<SkTypeface> onMakeFromData(sk_sp<SkData>, int) const override { return nullptr; }
