@@ -62,12 +62,16 @@ public:
         int bestScore = -1;
         sk_sp<SkTypeface> bestMatch = nullptr;
 
-        for (auto tf = fRegisteredFamilies.begin(); tf != fRegisteredFamilies.end(); ++tf) {
-            TypefaceAndMatchScore matched = tf->second->matchCharacter(style, bcp47, bcp47Count, character);
+        for (int i = 0; i < fFamilyNames.size(); ++i) {
+            auto found = fRegisteredFamilies.find(fFamilyNames[i]);
+            if (!found) {
+                continue;
+            }
+            TypefaceAndMatchScore matched = (*found)->matchCharacter(style, bcp47, bcp47Count, character);
             if (matched.fMatchScore == 16) {
                 return matched.fTypeface;
             }
-            if (matched.fMatchScore > bestScore || tf == fRegisteredFamilies.begin()) {
+            if (matched.fMatchScore > bestScore) {
                 bestScore = matched.fMatchScore;
                 bestMatch = matched.fTypeface;
             }

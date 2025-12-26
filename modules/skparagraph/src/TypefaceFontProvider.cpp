@@ -129,14 +129,10 @@ TypefaceAndMatchScore TypefaceFontStyleSet::matchCharacter(
         int score = 0;
         if (supportsChar) {
             score += 8;
-            if (tfStyle.width() == style.width()) score += 4;
-            if (tfStyle.slant() == style.slant()) score += 2;
-            if (tfStyle.weight() == style.weight()) score += 1;
-        } else {
-            if (tfStyle.width() == style.width()) score += 4;
-            if (tfStyle.slant() == style.slant()) score += 2;
-            if (tfStyle.weight() == style.weight()) score += 1;
         }
+        if (tfStyle.width() == style.width()) score += 4;
+        if (tfStyle.slant() == style.slant()) score += 2;
+        if (tfStyle.weight() == style.weight()) score += 1;
 
         if (score > result.fMatchScore) {
             result.fMatchScore = score;
