@@ -819,24 +819,35 @@ uint32_t OneLineShaper::FontKey::Hasher::operator()(const OneLineShaper::FontKey
 }
 
 
+// By definition any emoji_sequence starts from a codepoint that has
+// UCHAR_EMOJI property.
+// If the first codepoint does not have UCHAR_EMOJI_COMPONENT property,
+// we have an emoji sequence right away.
+// In two (and only two) cases an emoji sequence starts with a codepoint
+// that also has UCHAR_EMOJI_COMPONENT property.
+// emoji_flag_sequence   := regional_indicator regional_indicator
+// emoji_keycap_sequence := [0-9#*] \x{FE0F 20E3}
+// These two cases require additional checks of the next codepoint(s).
 SkUnichar OneLineShaper::getEmojiSequenceStart(SkUnicode* unicode, const char** begin, const char* end) {
     const char* next = *begin;
     auto codepoint1 = SkUTF::NextUTF8WithReplacement(&next, end);
-
-    const char* last = next;
-    auto codepoint2 = SkUTF::NextUTF8WithReplacement(&last, end);
-
-    if (codepoint2 == 0xFE0F) {
-        return codepoint1;
-    }
 
     if (!unicode->isEmoji(codepoint1)) {
         // This is not a basic emoji nor it an emoji sequence
         return -1;
     }
 
-    if (!unicode->isEmojiComponent(codepoint1)) {
+    if (unicode->isEmojiPresentation(codepoint1)) {
         // This is an emoji sequence start
+        *begin = next;
+        return codepoint1;
+    }
+
+    // Now we need to look at the next codepoint to see what is going on
+    const char* last = next;
+    auto codepoint2 = SkUTF::NextUTF8WithReplacement(&last, end);
+
+    if (codepoint2 == 0xFE0F) {
         *begin = next;
         return codepoint1;
     }

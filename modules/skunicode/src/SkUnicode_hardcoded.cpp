@@ -95,6 +95,11 @@ bool SkUnicodeHardCodedCharProperties::isEmojiComponent(SkUnichar utf8)  {
     return false;
 }
 
+bool SkUnicodeHardCodedCharProperties::isEmojiPresentation(SkUnichar utf8)  {
+    SkDEBUGFAIL("isEmojiPresentation Not implemented");
+    return false;
+}
+
 bool SkUnicodeHardCodedCharProperties::isEmojiModifier(SkUnichar utf8)  {
     SkDEBUGFAIL("isEmojiModifier Not implemented");
     return false;

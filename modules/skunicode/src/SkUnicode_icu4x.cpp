@@ -46,6 +46,7 @@ public:
         fBlanks = ICU4XCodePointSetData::load_blank(fDataProvider).ok().value();
         fEmoji = ICU4XCodePointSetData::load_emoji(fDataProvider).ok().value();
         fEmojiComponent = ICU4XCodePointSetData::load_emoji_component(fDataProvider).ok().value();
+        fEmojiPresentation = ICU4XCodePointSetData::load_emoji_presentation(fDataProvider).ok().value();
         fEmojiModifier = ICU4XCodePointSetData::load_emoji_modifier(fDataProvider).ok().value();
         fEmojiModifierBase = ICU4XCodePointSetData::load_emoji_modifier_base(fDataProvider).ok().value();
         fEmoji = ICU4XCodePointSetData::load_emoji(fDataProvider).ok().value();
@@ -71,6 +72,7 @@ public:
     }
     bool isEmoji(SkUnichar utf8) override { return fEmoji.contains(utf8); }
     bool isEmojiComponent(SkUnichar utf8) override { return fEmojiComponent.contains(utf8); }
+    bool isEmojiPresentation(SkUnichar utf8) override { return fEmojiPresentation.contains(utf8); }
     bool isEmojiModifierBase(SkUnichar utf8) override { return fEmojiModifierBase.contains(utf8); }
     bool isEmojiModifier(SkUnichar utf8) override { return fEmojiModifier.contains(utf8); }
     bool isRegionalIndicator(SkUnichar utf8) override { return fRegionalIndicator.contains(utf8); }
@@ -327,6 +329,7 @@ private:
     ICU4XCodePointSetData fBlanks;
     ICU4XCodePointSetData fEmoji;
     ICU4XCodePointSetData fEmojiComponent;
+    ICU4XCodePointSetData fEmojiPresentation;
     ICU4XCodePointSetData fEmojiModifier;
     ICU4XCodePointSetData fEmojiModifierBase;
     ICU4XCodePointSetData fRegionalIndicator;
