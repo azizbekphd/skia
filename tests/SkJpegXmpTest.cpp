@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Google Inc.
+ * Copyright 2023 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -31,7 +31,7 @@ DEF_TEST(SkJpegXmp_standardXmp, r) {
                </rdf:RDF>
             </x:xmpmeta>)";
 
-    std::vector<sk_sp<SkData>> app1Params;
+    std::vector<sk_sp<const SkData>> app1Params;
     app1Params.push_back(SkData::MakeWithoutCopy(xmpData, sizeof(xmpData) - 1));
 
     auto xmp = SkJpegMakeXmp(app1Params);
@@ -55,7 +55,7 @@ DEF_TEST(SkJpegXmp_defaultValues, r) {
                </rdf:RDF>
             </x:xmpmeta>)";
 
-    std::vector<sk_sp<SkData>> app1Params;
+    std::vector<sk_sp<const SkData>> app1Params;
     app1Params.push_back(SkData::MakeWithoutCopy(xmpData, sizeof(xmpData) - 1));
 
     auto xmp = SkJpegMakeXmp(app1Params);
@@ -143,7 +143,7 @@ DEF_TEST(SkJpegXmp_readExtendedXmp, r) {
     const std::string extendedXmpData2WithHeader =
             extended_xmp_with_header(digest, totalExtendedXmpSize, offset2, extendedXmpData2);
 
-    std::vector<sk_sp<SkData>> app1Params;
+    std::vector<sk_sp<const SkData>> app1Params;
     app1Params.push_back(SkData::MakeWithoutCopy(standardXmpDataWithHeader.data(),
                                                  standardXmpDataWithHeader.length()));
     app1Params.push_back(SkData::MakeWithoutCopy(extendedXmpData1WithHeader.data(),

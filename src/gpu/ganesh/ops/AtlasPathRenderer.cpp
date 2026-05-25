@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Google LLC.
+ * Copyright 2019 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -317,8 +317,7 @@ PathRenderer::CanDrawPath AtlasPathRenderer::onCanDrawPath(const CanDrawPathArgs
 }
 
 bool AtlasPathRenderer::onDrawPath(const DrawPathArgs& args) {
-    SkPath path;
-    args.fShape->asPath(&path);
+    SkPath path = args.fShape->asPath();
 
     const SkRect pathDevBounds = args.fViewMatrix->mapRect(args.fShape->bounds());
     SkASSERT(this->pathFitsInAtlas(pathDevBounds, args.fAAType));

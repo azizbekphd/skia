@@ -34,7 +34,7 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilter::makeComposed(
         return sk_ref_sp(this);
     }
 
-    return PrecompileColorFilters::Compose({ sk_ref_sp(this) }, { std::move(inner) });
+    return PrecompileColorFilters::Compose({{ sk_ref_sp(this) }}, {{ std::move(inner) }});
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -80,7 +80,7 @@ public:
 private:
     int numChildCombinations() const override { return fNumOuterCombos * fNumInnerCombos; }
 
-    void addToKey(const KeyContext& keyContext, int desiredCombination) const override {
+    std::pair<int, int> getChildCombinations(int desiredCombination) const {
         SkASSERT(desiredCombination < this->numCombinations());
 
         const int desiredOuterCombination = desiredCombination % fNumOuterCombos;
@@ -90,6 +90,22 @@ private:
         remainingCombinations /= fNumInnerCombos;
 
         SkASSERT(!remainingCombinations);
+        return {desiredInnerCombination, desiredOuterCombination};
+    }
+
+    bool isAlphaUnchanged(int desiredCombination) const override {
+        auto [desiredInnerCombination, desiredOuterCombination] =
+                this->getChildCombinations(desiredCombination);
+        auto [inner, innerOption] = SelectOption(SkSpan(fInnerOptions), desiredInnerCombination);
+        auto [outer, outerOption] = SelectOption(SkSpan(fOuterOptions), desiredOuterCombination);
+        // See SkComposeColorFilter::onIsAlphaUnchanged
+        return inner->priv().isAlphaUnchanged(innerOption) &&
+               outer->priv().isAlphaUnchanged(outerOption);
+    }
+
+    void addToKey(const KeyContext& keyContext, int desiredCombination) const override {
+        auto [desiredInnerCombination, desiredOuterCombination] =
+                this->getChildCombinations(desiredCombination);
 
         sk_sp<PrecompileColorFilter> inner, outer;
         int innerChildOptions, outerChildOptions;
@@ -145,10 +161,26 @@ private:
         return fBlendOptions.numCombinations();
     }
 
-    void addToKey(const KeyContext& keyContext, int desiredCombination) const override {
-        auto [blender, option ] = fBlendOptions.selectOption(desiredCombination);
+    SkBlendMode getDesiredBlendMode(int desiredCombination) const {
+        auto [blender, option] = fBlendOptions.selectOption(desiredCombination);
         SkASSERT(option == 0 && blender->priv().asBlendMode().has_value());
-        SkBlendMode representativeBlendMode = *blender->priv().asBlendMode();
+        return *blender->priv().asBlendMode();
+    }
+
+    bool isAlphaUnchanged(int desiredCombination) const override {
+        SkBlendMode representativeBlendMode = this->getDesiredBlendMode(desiredCombination);
+        // See SkBlendModeColorFilter::onIsAlphaUnchanged
+        switch (representativeBlendMode) {
+            case SkBlendMode::kDst:
+            case SkBlendMode::kSrcATop:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    void addToKey(const KeyContext& keyContext, int desiredCombination) const override {
+        SkBlendMode representativeBlendMode = this->getDesiredBlendMode(desiredCombination);
         // Here the color is just a stand-in for a later value.
         AddBlendModeColorFilter(keyContext, representativeBlendMode, SK_PMColor4fWHITE);
     }
@@ -188,29 +220,44 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::Blend(SkSpan<const SkBlendM
 //--------------------------------------------------------------------------------------------------
 class PrecompileMatrixColorFilter : public PrecompileColorFilter {
 public:
-    PrecompileMatrixColorFilter(bool inHSLA) : fInHSLA(inHSLA) {}
+    PrecompileMatrixColorFilter(bool inHSLA, bool clamp) : fInHSLA(inHSLA), fClamp(clamp) {}
 
 private:
+    // The matrix values define whether or not alpha is unchanged (which can affect final paint key
+    // decisions for blending). Keep two combinations to represent the alpha-unchanged vs.
+    // alpha-changing scenarios.
+    int numIntrinsicCombinations() const override { return 2; }
+
+    bool isAlphaUnchanged(int desiredCombination) const override {
+        SkASSERT(desiredCombination == 0 || desiredCombination == 1);
+        return desiredCombination == 1;
+    }
+
     void addToKey(const KeyContext& keyContext, int desiredCombination) const override {
-        SkASSERT(desiredCombination == 0);
+        // NOTE: desiredCombination (i.e. whether or not alpha is unchanged) doesn't impact what
+        // this node would add to the key, but it can bubble up to later decisions for the key.
+        SkASSERT(desiredCombination == 0 || desiredCombination == 1);
         static constexpr float kIdentity[20] = { 1, 0, 0, 0, 0,
                                                  0, 1, 0, 0, 0,
                                                  0, 0, 1, 0, 0,
                                                  0, 0, 0, 1, 0 };
-        MatrixColorFilterBlock::MatrixColorFilterData matrixCFData(kIdentity, fInHSLA,
-                                                                   /* clamp= */ true);
+        MatrixColorFilterBlock::MatrixColorFilterData matrixCFData(kIdentity, fInHSLA, fClamp);
         MatrixColorFilterBlock::AddBlock(keyContext, matrixCFData);
     }
 
+    // There are 3 possible combinations here, but we force them to be specified when the
+    // PrecompileColorFilter is created and not as an intrinsic combination count. This combines
+    // with the intrinsic combination for whether or not the matrix's 4th row is [0,0,0,1,0].
     bool fInHSLA;
+    bool fClamp; // always true if fInHLSA is true
 };
 
-sk_sp<PrecompileColorFilter> PrecompileColorFilters::Matrix() {
-    return sk_make_sp<PrecompileMatrixColorFilter>(/*inHSLA=*/false);
+sk_sp<PrecompileColorFilter> PrecompileColorFilters::Matrix(bool clamp) {
+    return sk_make_sp<PrecompileMatrixColorFilter>(/*inHSLA=*/false, clamp);
 }
 
 sk_sp<PrecompileColorFilter> PrecompileColorFilters::HSLAMatrix() {
-    return sk_make_sp<PrecompileMatrixColorFilter>(/*inHSLA=*/true);
+    return sk_make_sp<PrecompileMatrixColorFilter>(/*inHSLA=*/true, /*clamp=*/true);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -224,6 +271,8 @@ public:
 
 private:
     int numIntrinsicCombinations() const override { return fNumCombinations; }
+
+    bool isAlphaUnchanged(int /*desiredCombination*/) const override { return true; }
 
     void addToKey(const KeyContext& keyContext, int desiredCombination) const override {
         const int srcCombination = desiredCombination % fSrc.size();
@@ -248,13 +297,13 @@ private:
 };
 
 sk_sp<PrecompileColorFilter> PrecompileColorFilters::LinearToSRGBGamma() {
-    return PrecompileColorFiltersPriv::ColorSpaceXform({ SkColorSpace::MakeSRGBLinear() },
-                                                       { SkColorSpace::MakeSRGB() });
+    return PrecompileColorFiltersPriv::ColorSpaceXform({{ SkColorSpace::MakeSRGBLinear() }},
+                                                       {{ SkColorSpace::MakeSRGB() }});
 }
 
 sk_sp<PrecompileColorFilter> PrecompileColorFilters::SRGBToLinearGamma() {
-    return PrecompileColorFiltersPriv::ColorSpaceXform({ SkColorSpace::MakeSRGB() },
-                                                       { SkColorSpace::MakeSRGBLinear() });
+    return PrecompileColorFiltersPriv::ColorSpaceXform({{ SkColorSpace::MakeSRGB() }},
+                                                       {{ SkColorSpace::MakeSRGBLinear() }});
 }
 
 sk_sp<PrecompileColorFilter> PrecompileColorFiltersPriv::ColorSpaceXform(
@@ -286,11 +335,14 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::Lerp(
     }
 
     return PrecompileRuntimeEffects::MakePrecompileColorFilter(sk_ref_sp(lerpEffect),
-                                                               { dsts, srcs });
+                                                               {{ dsts, srcs }});
 }
 
 //--------------------------------------------------------------------------------------------------
 class PrecompileTableColorFilter : public PrecompileColorFilter {
+private:
+    bool isAlphaUnchanged(int /*desiredCombination*/) const override { return false; }
+
     void addToKey(const KeyContext& keyContext, int desiredCombination) const override {
         SkASSERT(desiredCombination == 0);
         TableColorFilterBlock::TableColorFilterData data(/* proxy= */ nullptr);
@@ -323,7 +375,7 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::HighContrast() {
     const skcms_TransferFunction kTF = SkNamedTransferFn::kLinear;
     const SkAlphaType kUnpremul = kUnpremul_SkAlphaType;
     return PrecompileColorFiltersPriv::WithWorkingFormat(
-            {std::move(cf)}, &kTF, /* gamut= */ nullptr, &kUnpremul);
+            {{std::move(cf)}}, &kTF, /* gamut= */ nullptr, &kUnpremul);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -344,6 +396,8 @@ sk_sp<PrecompileColorFilter> PrecompileColorFilters::Overdraw() {
 
 //--------------------------------------------------------------------------------------------------
 class PrecompileGaussianColorFilter : public PrecompileColorFilter {
+    bool isAlphaUnchanged(int /*desiredCombination*/) const override { return false; }
+
     void addToKey(const KeyContext& keyContext, int desiredCombination) const override {
         SkASSERT(desiredCombination == 0);
         keyContext.paintParamsKeyBuilder()->addBlock(BuiltInCodeSnippetID::kGaussianColorFilter);
@@ -372,6 +426,11 @@ public:
 private:
     int numChildCombinations() const override { return fNumChildCombos; }
 
+    bool isAlphaUnchanged(int desiredCombination) const override {
+        auto [child, childOption] = SelectOption(SkSpan(fChildOptions), desiredCombination);
+        return child->priv().isAlphaUnchanged(childOption);
+    }
+
     void addToKey(const KeyContext& keyContext, int desiredCombination) const override {
         SkASSERT(desiredCombination < fNumChildCombos);
 
@@ -382,8 +441,8 @@ private:
                                                   : SkColorSpace::MakeSRGB();
         SkAlphaType workingAT;
         sk_sp<SkColorSpace> workingCS = fWorkingFormatCalculator.workingFormat(dstCS, &workingAT);
-        SkColorInfo workingInfo(dstInfo.colorType(), workingAT, workingCS);
-        KeyContextWithColorInfo workingContext(keyContext, workingInfo);
+        KeyContext workingContext =
+                keyContext.withColorInfo({dstInfo.colorType(), workingAT, workingCS});
 
         // Use two nested compose blocks to chain (dst->working), child, and (working->dst) together
         // while appearing as one block to the parent node.

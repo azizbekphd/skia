@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE_ANIMATED(SkPath_cubicTo_example_parametric_animated, 512, 512, false, 0, 3) {
@@ -66,10 +66,10 @@ void draw(SkCanvas* canvas) {
 
     paint.setStrokeWidth(5);
     paint.setColor(SkColorSetARGB(255, 0, 0, 255));
-    SkPath cubicCurve;
+    SkPathBuilder cubicCurve;
     cubicCurve.moveTo(a);
     cubicCurve.cubicTo(b, c, d);
-    canvas->drawPath(cubicCurve, paint);
+    canvas->drawPath(cubicCurve.detach(), paint);
 
     SkFont font(fontMgr->matchFamilyStyle(nullptr, {}), 32);
     SkPaint textPaint;

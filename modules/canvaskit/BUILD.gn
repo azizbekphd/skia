@@ -1,4 +1,4 @@
-# Copyright 2020 Google Inc.
+# Copyright 2020 Google LLC
 #
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -44,7 +44,6 @@ if (skia_enable_tools) {
       "../../modules/svg/src/SkSVGUse.cpp",
       "../../modules/svg/src/SkSVGValue.cpp",
       "../../tools/viewer/SKPSlide.cpp",
-      "../../tools/viewer/SampleSlide.cpp",
       "../../tools/viewer/SvgSlide.cpp",
     ]
   }
@@ -118,7 +117,9 @@ skia_wasm_lib("canvaskit") {
   if (skia_canvaskit_enable_embedded_font) {
     deps += [ ":create_notomono_cpp" ]
   }
-
+  if (skia_canvaskit_enable_pathops) {
+    deps += [ "../..:pathops" ]
+  }
   sources = [
     "WasmCommon.h",
     "canvaskit_bindings.cpp",
@@ -164,7 +165,6 @@ skia_wasm_lib("canvaskit") {
   if (is_debug) {
     ldflags += [
       "-O0",
-      "-sDEMANGLE_SUPPORT=1",
       "-sASSERTIONS=1",
       "-sGL_ASSERTIONS=1",
       "-g3",
@@ -224,7 +224,7 @@ skia_wasm_lib("canvaskit") {
   }
 
   ldflags += [
-    "-std=c++17",
+    "-std=c++20",
     "--bind",
     "--no-entry",
     "--pre-js",
@@ -353,13 +353,12 @@ skia_wasm_lib("canvaskit") {
 
     # INCOMING_MODULE_JS_API is set to empty by default.
     # https://github.com/emscripten-core/emscripten/blob/8dc91db45bf96c174531006839472a3924d105aa/src/settings.js#L1204
-    "-sINCOMING_MODULE_JS_API=onRuntimeInitialized",
+    "-sINCOMING_MODULE_JS_API=onRuntimeInitialized,locateFile",
   ]
 
   defines = [
     "SK_FORCE_8_BYTE_ALIGNMENT",
     "EMSCRIPTEN_HAS_UNBOUND_TYPE_NAMES=0",
-    "SK_DISABLE_LEGACY_PARAGRAPH_UNICODE=1",
   ]
   if (is_debug) {
     defines += [ "SK_DEBUG" ]
@@ -388,10 +387,7 @@ skia_wasm_lib("canvaskit") {
     defines += [ "CK_SERIALIZE_SKP" ]
   }
   if (skia_enable_ganesh) {
-    defines += [
-      "SK_GANESH",
-      "SK_DISABLE_LEGACY_SHADERCONTEXT",
-    ]
+    defines += [ "SK_GANESH" ]
     if (skia_canvaskit_enable_webgl) {
       defines += [
         "SK_GL",

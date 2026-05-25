@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(checker_board, 256, 256, false, 0) {
@@ -6,8 +6,7 @@ void checkerboard(SkCanvas* canvas) {
     SkColor color1 = SK_ColorLTGRAY;
     SkColor color2 = SK_ColorCYAN;
     SkScalar scale = 10.0f;
-    SkPath path;
-    path.addRect(0, 0, scale, scale);
+    SkPath path = SkPath::Rect({0, 0, scale, scale});
     SkMatrix matrix = SkMatrix::Scale(2 * scale, scale);
     matrix.preSkew(0.5f, 0);
     SkPaint paint;

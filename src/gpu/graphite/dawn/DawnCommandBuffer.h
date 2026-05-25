@@ -43,8 +43,8 @@ public:
     }
 #endif
 
-    bool startTimerQuery() override;
-    void endTimerQuery() override;
+    bool startStatsQuery(GpuStatsFlags) override;
+    void endStatsQuery(GpuStatsFlags) override;
     std::optional<GpuStats> gpuStats() override;
 
 private:
@@ -60,7 +60,6 @@ private:
     bool setNewCommandBufferResources() override;
 
     bool onAddRenderPass(const RenderPassDesc&,
-                         SkIRect renderPassBounds,
                          const Texture* colorTexture,
                          const Texture* resolveTexture,
                          const Texture* depthStencilTexture,
@@ -72,7 +71,6 @@ private:
     // Methods for populating a Dawn RenderPassEncoder:
     bool beginRenderPass(const RenderPassDesc&,
                          const SkIPoint& resolveOffset,
-                         SkIRect renderPassBounds,
                          const Texture* colorTexture,
                          const Texture* resolveTexture,
                          const Texture* depthStencilTexture);
@@ -80,18 +78,17 @@ private:
             const RenderPassDesc& intendedRenderPassDesc,
             const wgpu::RenderPassDescriptor& intendedDawnRenderPassDesc,
             const SkIPoint& resolveOffset,
-            const SkIRect& renderPassBounds,
             const DawnTexture* msaaTexture,
             const DawnTexture* resolveTexture);
     bool doBlitWithDraw(const wgpu::RenderPassEncoder& renderEncoder,
                         const RenderPassDesc& frontendRenderPassDescKey,
                         const wgpu::TextureView& srcTextureView,
-                        int srcSampleCount,
+                        SampleCount srcSampleCount,
                         const SkIPoint& srcOffset,
                         const SkIRect& dstBounds);
     bool endRenderPass();
 
-    bool addDrawPass(const DrawPass*);
+    [[nodiscard]] bool addDrawPass(DrawPass*);
 
     bool bindGraphicsPipeline(const GraphicsPipeline*);
     void setBlendConstants(std::array<float, 4> blendConstants);
@@ -164,7 +161,7 @@ private:
 
     bool fBoundUniformBuffersDirty = false;
 
-    std::array<BindBufferInfo, DawnGraphicsPipeline::kNumUniformBuffers> fBoundUniforms;
+    std::array<BindBufferInfo, DawnGraphicsPipeline::kMaxNumUniformBuffers> fBoundUniforms;
 
     wgpu::CommandEncoder fCommandEncoder;
     wgpu::RenderPassEncoder fActiveRenderPassEncoder;
@@ -182,6 +179,7 @@ private:
     size_t fCurrentIndirectBufferOffset = 0;
 
     bool fWroteFirstPassTimestamps = false;
+    bool fHasStatsQuery = false;
     wgpu::QuerySet fTimestampQuerySet;
     sk_sp<DawnBuffer> fTimestampQueryBuffer;
     sk_sp<DawnBuffer> fTimestampQueryXferBuffer;

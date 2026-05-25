@@ -40,9 +40,9 @@
 #include "src/gpu/ganesh/effects/GrDistanceFieldGeoProc.h"
 #include "src/gpu/ganesh/ops/GrDrawOp.h"
 #include "src/gpu/ganesh/ops/GrSimpleMeshDrawOpHelper.h"
+#include "src/gpu/ganesh/text/GlyphData.h"
 #include "src/gpu/ganesh/text/GrAtlasManager.h"
 #include "src/text/gpu/DistanceFieldAdjustTable.h"
-#include "src/text/gpu/GlyphVector.h"
 #include "src/text/gpu/SubRunContainer.h"
 
 #if defined(SK_GAMMA_APPLY_TO_A8)
@@ -52,6 +52,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <limits>
 #include <new>
 #include <tuple>
 #include <utility>
@@ -353,8 +354,25 @@ auto AtlasTextOp::Geometry::Make(const sktext::gpu::AtlasSubRun& subRun,
 }
 
 void AtlasTextOp::Geometry::fillVertexData(void *dst, int offset, int count) const {
-    fSubRun.fillVertexData(
-            dst, offset, count, fColor, fDrawMatrix, fDrawOrigin, fClipRect);
+    SkASSERT(fSubRun.glyphVector().hasBackendData());
+
+    // Get the backend-specific glyph data
+    auto& glyphData = fSubRun.glyphVector().accessBackendData<GlyphData>();
+
+    auto glyphSpan = fSubRun.glyphVector().accessBackendGlyphs<Glyph>();
+
+    // Apply the draw origin translation to the matrix
+    SkMatrix positionMatrix = fDrawMatrix;
+    positionMatrix.preTranslate(fDrawOrigin.x(), fDrawOrigin.y());
+
+    glyphData.fillVertexData(fSubRun.vertexFiller(),
+                             glyphSpan,
+                             offset,
+                             count,
+                             fColor,
+                             positionMatrix,
+                             fClipRect,
+                             dst);
 }
 
 void AtlasTextOp::visitProxies(const GrVisitProxyFunc& func) const {
@@ -473,8 +491,13 @@ void AtlasTextOp::onPrepareDraws(GrMeshDrawTarget* target) {
     } else
 #endif
     {
-        auto filter = fNeedsGlyphTransform ? GrSamplerState::Filter::kLinear
-                                           : GrSamplerState::Filter::kNearest;
+        // Only use linear padding if the glyphs were also padded for it. If we somehow get a direct
+        // subrun with a corrupted transform, we should still use nearest neighbor since it was
+        // packed tightly.
+        const bool hasGlyphPadding = atlasManager->supportsBilerp() ||
+                                     fHead->fSubRun.glyphSrcPadding() > 0;
+        auto filter = fNeedsGlyphTransform && hasGlyphPadding ? GrSamplerState::Filter::kLinear
+                                                              : GrSamplerState::Filter::kNearest;
         // Bitmap text uses a single color, combineIfPossible ensures all geometries have the same
         // color, so we can use the first's without worry.
         flushInfo.fGeometryProcessor = GrBitmapTextGeoProc::Make(
@@ -519,24 +542,33 @@ void AtlasTextOp::onPrepareDraws(GrMeshDrawTarget* target) {
 
     for (const Geometry* geo = fHead; geo != nullptr; geo = geo->fNext) {
         const sktext::gpu::AtlasSubRun& subRun = geo->fSubRun;
-        SkASSERTF((int) subRun.vertexStride(geo->fDrawMatrix) == vertexStride,
-                  "subRun stride: %d vertex buffer stride: %d\n",
-                  (int)subRun.vertexStride(geo->fDrawMatrix), vertexStride);
+
+        if (!subRun.glyphVector().hasBackendData()) {
+            subRun.glyphVector().initBackendData<GlyphData>(target->strikeCache(), maskFormat);
+        }
+
+        auto& glyphData = subRun.glyphVector().accessBackendData<GlyphData>();
+
+        SkDEBUGCODE(int strideCheck = SkToInt(glyphData.vertexStride(subRun.maskFormat(),
+                                                                     geo->fDrawMatrix)));
+        SkASSERTF(strideCheck == vertexStride,
+                   "subRun stride: %d vertex buffer stride: %d\n",
+                   strideCheck, vertexStride);
 
         const int subRunEnd = subRun.glyphCount();
-        auto regenerateDelegate = [&](sktext::gpu::GlyphVector* glyphs,
-                                      int begin,
-                                      int end,
-                                      skgpu::MaskFormat maskFormat,
-                                      int padding) {
-            return glyphs->regenerateAtlasForGanesh(begin, end, maskFormat, padding, target);
-        };
+
         for (int subRunCursor = 0; subRunCursor < subRunEnd;) {
             // Regenerate the atlas for the remainder of the glyphs in the run, or the remainder
             // of the glyphs to fill the vertex buffer.
             int regenEnd = subRunCursor + std::min(subRunEnd - subRunCursor, quadEnd - quadCursor);
-            auto[ok, glyphsRegenerated] = subRun.regenerateAtlas(subRunCursor, regenEnd,
-                                                                 regenerateDelegate);
+
+            auto [ok, glyphsRegenerated] = glyphData.regenerateAtlas(subRunCursor,
+                                                                     regenEnd,
+                                                                     subRun.glyphVector(),
+                                                                     maskFormat,
+                                                                     subRun.glyphSrcPadding(),
+                                                                     target);
+
             // There was a problem allocating the glyph in the atlas. Bail.
             if (!ok) {
                 return;
@@ -620,8 +652,9 @@ void AtlasTextOp::createDrawForGeneratedGlyphs(GrMeshDrawTarget* target,
         } else
 #endif
         {
-            auto filter = fNeedsGlyphTransform ? GrSamplerState::Filter::kLinear
-                                               : GrSamplerState::Filter::kNearest;
+            const bool hasGlyphPadding = fHead->fSubRun.glyphSrcPadding() > 0;
+            auto filter = fNeedsGlyphTransform && hasGlyphPadding
+                    ? GrSamplerState::Filter::kLinear : GrSamplerState::Filter::kNearest;
             reinterpret_cast<GrBitmapTextGeoProc*>(gp)->addNewViews(views, numActiveViews, filter);
         }
     }
@@ -647,6 +680,14 @@ GrOp::CombineResult AtlasTextOp::onCombineIfPossible(GrOp* t, SkArenaAlloc*, con
         fHasPerspective != that->fHasPerspective ||
         fUseGammaCorrectDistanceTable != that->fUseGammaCorrectDistanceTable) {
         // All flags must match for an op to be combined
+        return CombineResult::kCannotCombine;
+    }
+
+    // We use the same filter for every Geometry that is combined, but the filter choice only looks
+    // at the head's src padding, so we can only combine if we are consistent with that.
+    // NOTE: We don't have access to the context or atlas manager to check if it's always adding
+    // padding (even when the glyphs don't add it themselves), so this is conservative.
+    if (fHead->fSubRun.glyphSrcPadding() != that->fHead->fSubRun.glyphSrcPadding()) {
         return CombineResult::kCannotCombine;
     }
 
@@ -678,6 +719,10 @@ GrOp::CombineResult AtlasTextOp::onCombineIfPossible(GrOp* t, SkArenaAlloc*, con
             // This ensures all merged bitmap color text ops have a constant color
             return CombineResult::kCannotCombine;
         }
+    }
+
+    if (std::numeric_limits<int>::max() - fNumGlyphs < that->fNumGlyphs) {
+        return CombineResult::kCannotCombine;
     }
 
     fNumGlyphs += that->fNumGlyphs;
@@ -730,5 +775,3 @@ GrGeometryProcessor* AtlasTextOp::setupDfProcessor(SkArenaAlloc* arena,
 #endif // !defined(SK_DISABLE_SDF_TEXT)
 
 } // namespace skgpu::ganesh
-
-

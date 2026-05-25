@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Google Inc.
+ * Copyright 2021 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -21,7 +21,7 @@ static const skcms_TransferFunction gTFs[] = {
     SkNamedTransferFn::kRec2020,
     SkNamedTransferFn::kPQ,
     SkNamedTransferFn::kHLG,
-    {-3.0f, 2.0f, 2.0f, 1/0.17883277f, 0.28466892f, 0.55991073f,  3.0f },   // HLG scaled 4x
+    SkNamedTransferFn::kRec709,
 };
 
 static const skcms_Matrix3x3 gGamuts[] = {

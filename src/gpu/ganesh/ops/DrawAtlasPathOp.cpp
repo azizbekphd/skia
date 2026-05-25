@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Google Inc.
+ * Copyright 2020 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -225,7 +225,7 @@ void DrawAtlasPathOp::onPrepare(GrOpFlushState* flushState) {
 
     if (VertexWriter instanceWriter = flushState->makeVertexWriter(
                 fProgram->geomProc().instanceStride(), fInstanceCount, &fInstanceBuffer,
-                &fBaseInstance)) {
+                &fBaseInstance)) SK_LIKELY {
         for (const Instance* i = fHeadInstance; i; i = i->fNext) {
             instanceWriter << SkRect::Make(i->fFillBounds)
                            << VertexWriter::If(fUsesLocalCoords,

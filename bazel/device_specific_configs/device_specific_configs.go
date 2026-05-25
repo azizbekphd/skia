@@ -298,15 +298,6 @@ var Configs = map[string]Config{
 		CPU: "SnapdragonQM215",
 		GPU: "Adreno308",
 	},
-	"Kevin": {
-		Name: "Kevin",
-		Keys: map[string]string{
-			"arch":  "arm",
-			"model": "Kevin",
-			"os":    "ChromeOS",
-		},
-		GPU: "MaliT860",
-	},
 	"MacBook10.1": {
 		Name: "MacBook10.1",
 		Keys: map[string]string{
@@ -443,16 +434,6 @@ var Configs = map[string]Config{
 			"os":    "Debian10",
 		},
 		GPU: "IntelHD405",
-	},
-	"NUC5i7RYH": {
-		Name: "NUC5i7RYH",
-		Keys: map[string]string{
-			"arch":  "x86_64",
-			"model": "NUC5i7RYH",
-			"os":    "Win10",
-		},
-		CPU: "AVX2",
-		GPU: "IntelIris6100",
 	},
 	"NUC6i5SYK": {
 		Name: "NUC6i5SYK",
@@ -620,33 +601,6 @@ var Configs = map[string]Config{
 			"os":    "Win10",
 		},
 		GPU: "RadeonVega6",
-	},
-	"Sparky360": {
-		Name: "Sparky360",
-		Keys: map[string]string{
-			"arch":  "x86_64",
-			"model": "Sparky360",
-			"os":    "ChromeOS",
-		},
-		GPU: "IntelUHDGraphics605",
-	},
-	"Spin513": {
-		Name: "Spin513",
-		Keys: map[string]string{
-			"arch":  "arm",
-			"model": "Spin513",
-			"os":    "ChromeOS",
-		},
-		GPU: "Adreno618",
-	},
-	"Spin514": {
-		Name: "Spin514",
-		Keys: map[string]string{
-			"arch":  "x86_64",
-			"model": "Spin514",
-			"os":    "ChromeOS",
-		},
-		GPU: "RadeonVega3",
 	},
 	"VMware7.1_Mac10.13": {
 		Name: "VMware7.1_Mac10.13",

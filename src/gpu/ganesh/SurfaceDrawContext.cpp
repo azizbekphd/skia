@@ -99,7 +99,6 @@
 
 struct GrShaderCaps;
 
-#define ASSERT_OWNED_RESOURCE(R) SkASSERT(!(R) || (R)->getContext() == this->drawingManager()->getContext())
 #define ASSERT_SINGLE_OWNER        SKGPU_ASSERT_SINGLE_OWNER(this->singleOwner())
 #define RETURN_IF_ABANDONED        if (fContext->abandoned()) { return; }
 #define RETURN_FALSE_IF_ABANDONED  if (fContext->abandoned()) { return false; }
@@ -1740,8 +1739,8 @@ bool SurfaceDrawContext::drawSimpleShape(const GrClip* clip,
             // for and outsets thin non-aa rects to 1px, the path renderer could be skipped.
             SkScalar coverage;
             if (aaType == GrAAType::kCoverage ||
-                !SkDrawTreatAAStrokeAsHairline(shape.style().strokeRec().getWidth(), viewMatrix,
-                                               &coverage)) {
+                !skcpu::DrawTreatAAStrokeAsHairline(
+                        shape.style().strokeRec().getWidth(), viewMatrix, &coverage)) {
                 this->drawStrokedLine(clip, std::move(*paint), aa, viewMatrix, linePts,
                                       shape.style().strokeRec());
                 return true;

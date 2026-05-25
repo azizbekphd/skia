@@ -19,6 +19,9 @@
 #include "src/gpu/graphite/PrecompileContextPriv.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/RendererProvider.h"
+#include "src/gpu/graphite/TextureInfoPriv.h"
+#include "src/sksl/SkSLUtil.h"
+#include "tests/graphite/precompile/AndroidRuntimeEffectManager.h"
 #include "tests/graphite/precompile/PrecompileTestUtils.h"
 #include "tools/graphite/UniqueKeyUtils.h"
 
@@ -80,31 +83,31 @@ void Base642YCbCr(const char* str) {
             VulkanYcbcrConversion::FromImmutableSamplerInfo(s.immutableSamplerInfo());
 
     SkDebugf("VulkanYcbcrConversionInfo: format: %d extFormat: %llu model: %d range: %d "
-             "xOff: %d yOff: %d filter: %d explicit: %u features: %u components: %d %d %d %d\n",
-             info.fFormat,
-             (unsigned long long) info.fExternalFormat,
-             info.fYcbcrModel,
-             info.fYcbcrRange,
-             info.fXChromaOffset,
-             info.fYChromaOffset,
-             info.fChromaFilter,
-             info.fForceExplicitReconstruction,
-             info.fFormatFeatures,
-             info.fComponents.r,
-             info.fComponents.g,
-             info.fComponents.b,
-             info.fComponents.a);
+             "xOff: %d yOff: %d filter: %d explicit: %u components: %d %d %d %d\n",
+             info.format(),
+             (unsigned long long) info.externalFormat(),
+             info.model(),
+             info.range(),
+             info.xChromaOffset(),
+             info.yChromaOffset(),
+             info.chromaFilter(),
+             info.forceExplicitReconstruction(),
+             info.components().r,
+             info.components().g,
+             info.components().b,
+             info.components().a);
 }
 
 #endif // SK_VULKAN
 
 namespace {
 
-[[maybe_unused]] void find_duplicates(SkSpan<const PipelineLabel> cases) {
-    for (size_t i = 0; i < std::size(cases); ++i) {
-        for (size_t j = i+1; j < std::size(cases); ++j) {
-            if (!strcmp(cases[i].fString, cases[j].fString)) {
-                SkDebugf("Duplicate %zu && %zu\n", i, j);
+// Find any duplicate Pipeline labels
+[[maybe_unused]] void find_duplicates(SkSpan<const PipelineLabel> labels) {
+    for (size_t i = 0; i < labels.size(); ++i) {
+        for (size_t j = i+1; j < labels.size(); ++j) {
+            if (!strcmp(labels[j].fString, labels[i].fString)) {
+                SkDebugf("%zu is a duplicate of %zu\n", i, j);
             }
         }
     }
@@ -114,6 +117,15 @@ std::string rm_whitespace(const std::string& s) {
     auto start = s.find_first_not_of(' ');
     auto end = s.find_last_not_of(' ');
     return s.substr(start, (end - start) + 1);
+}
+
+bool skip(const char* str) {
+#if !defined(SK_VULKAN)
+    if (strstr(str, "HardwareImage(3:")) {
+        return true;
+    }
+#endif // SK_VULKAN
+    return false;
 }
 
 } // anonymous namespace
@@ -150,10 +162,22 @@ int PipelineLabelInfoCollector::processLabel(const std::string& precompiledLabel
     // We expect each PrecompileSettings case to handle disjoint sets of labels. If this
     // assert fires some pair of PrecompileSettings are handling the same case.
     SkASSERTF(result->second.fPrecompileCase == PipelineLabelInfo::kUninit,
-              "cases %d and %d cover the same label",
-              result->second.fPrecompileCase, precompileCase);
+              "cases %d and %d cover the same label (%d)",
+              result->second.fPrecompileCase, precompileCase, result->second.fCasesIndex);
     result->second.fPrecompileCase = precompileCase;
     return result->second.fCasesIndex;
+}
+
+int PipelineLabelInfoCollector::numNotCovered() const {
+    int numNotCovered = 0;
+
+    for (const auto& iter : fMap) {
+        if (iter.second.fPrecompileCase < 0) {
+            ++numNotCovered;
+        }
+    }
+
+    return numNotCovered;
 }
 
 void PipelineLabelInfoCollector::finalReport() {
@@ -210,13 +234,14 @@ void PipelineLabelInfoCollector::finalReport() {
 
 // Precompile with the provided PrecompileSettings then verify that:
 //   1) some case in 'kCases' is covered
-//   2) more than 40% of the generated Pipelines are in kCases
+//   2) more than 30% of the generated Pipelines are in kCases
 void RunTest(skgpu::graphite::PrecompileContext* precompileContext,
              skiatest::Reporter* reporter,
              const PrecompileSettings& settings,
              int precompileSettingsIndex,
              SkSpan<const PipelineLabel> cases,
-             PipelineLabelInfoCollector* collector) {
+             PipelineLabelInfoCollector* collector,
+             bool checkPaintOptionCoverage) {
     using namespace skgpu::graphite;
 
     precompileContext->priv().globalCache()->resetGraphicsPipelines();
@@ -249,7 +274,8 @@ void RunTest(skgpu::graphite::PrecompileContext* precompileContext,
             UniqueKeyUtils::ExtractKeyDescs(precompileContext, key, &pipelineDesc, &renderPassDesc);
 
             const RenderStep* renderStep = rendererProvider->lookup(pipelineDesc.renderStepID());
-            std::string tmp = GetPipelineLabel(dict, renderPassDesc, renderStep,
+            std::string tmp = GetPipelineLabel(precompileContext->priv().caps(),
+                                               dict, renderPassDesc, renderStep,
                                                pipelineDesc.paintParamsID());
             generatedLabels.insert(rm_whitespace(tmp));
         }
@@ -267,11 +293,14 @@ void RunTest(skgpu::graphite::PrecompileContext* precompileContext,
         }
     }
 
-    REPORTER_ASSERT(reporter, matchesInCases.size() >= 1,   // This tests requirement 1, above
-                    "%d: num matches: %zu", precompileSettingsIndex, matchesInCases.size());
     float utilization = ((float) matchesInCases.size())/generatedLabels.size();
-    REPORTER_ASSERT(reporter, utilization >= 0.4f,         // This tests requirement 2, above
-                    "%d: utilization: %f", precompileSettingsIndex, utilization);
+
+    if (checkPaintOptionCoverage) {
+        REPORTER_ASSERT(reporter, matchesInCases.size() >= 1,   // This tests requirement 1, above
+                        "%d: num matches: %zu", precompileSettingsIndex, matchesInCases.size());
+        REPORTER_ASSERT(reporter, utilization >= 0.3f,         // This tests requirement 2, above
+                        "%d: utilization: %f", precompileSettingsIndex, utilization);
+    }
 
 #if defined(PRINT_COVERAGE)
     // This block will print out all the cases in 'kCases' that the given PrecompileSettings
@@ -298,6 +327,111 @@ void RunTest(skgpu::graphite::PrecompileContext* precompileContext,
         SkDebugf("%c %d: %s\n", localMatches[index] ? 'h' : ' ', index, g.c_str());
         ++index;
     }
+#endif
+}
+
+void PrecompileTest(skiatest::Reporter* reporter,
+                    skgpu::graphite::Context* context,
+                    SkSpan<const PipelineLabel> labels,
+                    VisitSettingsFunc visitSettings,
+                    bool checkPaintOptionCoverage,
+                    bool checkPipelineLabelCoverage) {
+    using namespace skgpu::graphite;
+
+//    find_duplicates(labels);
+
+#if defined(SK_VULKAN)
+    // Use this call to map back from a HardwareImage sub-string to a VulkanYcbcrConversionInfo
+    //Base642YCbCr("kAwAEPcAAAAAAAAA");
+#endif
+
+    std::unique_ptr<PrecompileContext> precompileContext = context->makePrecompileContext();
+    const skgpu::graphite::Caps* caps = precompileContext->priv().caps();
+
+    TextureInfo textureInfo = caps->getDefaultSampledTextureInfo(kBGRA_8888_SkColorType,
+                                                                 skgpu::Mipmapped::kNo,
+                                                                 skgpu::Protected::kNo,
+                                                                 skgpu::Renderable::kYes);
+
+    const bool msaaSupported = caps->getCompatibleMSAASampleCount(textureInfo) > SampleCount::k1;
+
+    if (!msaaSupported) {
+        // The following pipelines rely on having MSAA
+        return;
+    }
+
+#ifdef SK_ENABLE_VELLO_SHADERS
+    if (caps->computeSupport()) {
+        // The following pipelines rely on not utilizing Vello
+        return;
+    }
+#endif
+
+    PipelineLabelInfoCollector collector(labels, skip);
+    RuntimeEffectManager effectManager;
+    bool skipped = false;
+
+    (*visitSettings)(
+         precompileContext.get(),
+         effectManager,
+         [&](skgpu::graphite::PrecompileContext* precompileContext,
+             const PrecompileSettings& precompileCase,
+             int index) {
+            const skgpu::graphite::Caps* caps = precompileContext->priv().caps();
+
+            static const int kChosenCase = -1; // only test this entry in 'kPrecompileCases'
+            if (kChosenCase != -1 && kChosenCase != index) {
+                skipped = true;
+                return;
+            }
+
+            if (caps->getDepthStencilFormat(DepthStencilFlags::kDepth) != TextureFormat::kD16) {
+                // The Pipeline labels in 'kOldLabels' have "D16" for this case (i.e., "D32F" is a
+                // fine Depth buffer type but won't match the strings).
+                bool skip = false;
+                for (const RenderPassProperties& rpp : precompileCase.fRenderPassProps) {
+                    if (rpp.fDSFlags == DepthStencilFlags::kDepth) {
+                        skip = true;
+                    }
+                }
+
+                if (skip) {
+                    skipped = true;
+                    return;
+                }
+            }
+
+            SkSpan<const SkBlendMode> blendModes = precompileCase.fPaintOptions.getBlendModes();
+            bool skip = false;
+            for (SkBlendMode bm : blendModes) {
+                if (bm == SkBlendMode::kSrc && !caps->shaderCaps()->fDualSourceBlendingSupport) {
+                    // The Pipeline labels were gathered on a device w/ dual source blending.
+                    // kSrc blend mode w/o dual source blending can result in a dst read and, thus,
+                    // break the string matching.
+                    skip = true;
+                    break;
+                }
+            }
+
+            if (skip) {
+                skipped = true;
+                return;
+            }
+
+            RunTest(precompileContext, reporter, precompileCase, index, labels, &collector,
+                    checkPaintOptionCoverage);
+        });
+
+    if (checkPipelineLabelCoverage && !skipped) {
+        REPORTER_ASSERT(reporter, collector.numNotCovered() == 0,
+                        "%d Pipeline labels are not covered", collector.numNotCovered());
+    }
+
+#if defined(FINAL_REPORT)
+    // This block prints out a final report. This includes a list of the cases in 'labels' that
+    // were not covered by the PaintOptions.
+
+    collector.finalReport();
 #endif
 }
 

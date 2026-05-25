@@ -45,9 +45,6 @@ public:
     static constexpr VkShaderStageFlagBits kLoadMSAAPushConstantStageFlags =
             VK_SHADER_STAGE_VERTEX_BIT;
 
-
-    using UniformBindGroupKey = FixedSizeKey<2 * VulkanGraphicsPipeline::kNumUniformBuffers>;
-
     VulkanResourceProvider(SharedContext* sharedContext,
                            SingleOwner*,
                            uint32_t recorderID,
@@ -60,17 +57,11 @@ public:
 
     sk_sp<VulkanDescriptorSet> findOrCreateDescriptorSet(SkSpan<DescriptorData>);
 
-    sk_sp<VulkanDescriptorSet> findOrCreateUniformBuffersDescriptorSet(
-            SkSpan<DescriptorData> requestedDescriptors,
-            SkSpan<BindBufferInfo> bindUniformBufferInfo);
-
     sk_sp<VulkanGraphicsPipeline> findOrCreateLoadMSAAPipeline(const RenderPassDesc&);
 
     // Find or create a compatible (needed when creating a framebuffer and graphics pipeline) or
     // full (needed when beginning a render pass from the command buffer) RenderPass.
     sk_sp<VulkanRenderPass> findOrCreateRenderPass(const RenderPassDesc&, bool compatibleOnly);
-
-    VkPipelineCache pipelineCache();
 
     VkPipelineLayout mockPipelineLayout() const { return fMockPipelineLayout; }
 
@@ -85,18 +76,16 @@ public:
 
 private:
     const VulkanSharedContext* vulkanSharedContext() const;
+    // VulkanSharedContext::pipelineCompileWasRequired() - which drives PipelineCache persistence
+    // - modifies the SharedContext so, when creating Pipelines, the ResourceProvider must
+    // provide a non-const SharedContext.
+    VulkanSharedContext* nonConstVulkanSharedContext();
 
-    sk_sp<GraphicsPipeline> createGraphicsPipeline(const RuntimeEffectDictionary*,
-                                                   const UniqueKey&,
-                                                   const GraphicsPipelineDesc&,
-                                                   const RenderPassDesc&,
-                                                   SkEnumBitMask<PipelineCreationFlags>,
-                                                   uint32_t compilationID) override;
     sk_sp<ComputePipeline> createComputePipeline(const ComputePipelineDesc&) override;
 
-    sk_sp<Texture> createTexture(SkISize, const TextureInfo&) override;
-    sk_sp<Texture> onCreateWrappedTexture(const BackendTexture&) override;
-    sk_sp<Buffer> createBuffer(size_t size, BufferType type, AccessPattern) override;
+    sk_sp<Texture> createTexture(SkISize, const TextureInfo&, std::string_view label) override;
+    sk_sp<Texture> onCreateWrappedTexture(const BackendTexture&, std::string_view label) override;
+    sk_sp<Buffer> createBuffer(size_t, BufferType, AccessPattern, std::string_view label) override;
     sk_sp<Sampler> createSampler(const SamplerDesc&) override;
 
     BackendTexture onCreateBackendTexture(SkISize dimensions, const TextureInfo&) override;
@@ -108,8 +97,6 @@ private:
                                           bool fromAndroidWindow) const override;
 #endif
     void onDeleteBackendTexture(const BackendTexture&) override;
-
-    VkPipelineCache fPipelineCache = VK_NULL_HANDLE;
 
     // Certain operations only need to occur once per renderpass (updating push constants and, if
     // necessary, binding the dst texture as an input attachment). It is useful to have a
@@ -124,8 +111,7 @@ private:
     // The shader modules and pipeline layout can be shared for all loadMSAA pipelines.
     std::unique_ptr<VulkanProgramInfo> fLoadMSAAProgram;
 
-    SkLRUCache<UniformBindGroupKey, sk_sp<VulkanDescriptorSet>,
-               UniformBindGroupKey::Hash> fUniformBufferDescSetCache;
+    skia_private::TArray<std::pair<GraphiteResourceKey, uint32_t>> fCurrentPoolSizes;
 };
 
 } // namespace skgpu::graphite

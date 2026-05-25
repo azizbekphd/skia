@@ -21,6 +21,7 @@
 #include "include/ports/SkFontScanner_FreeType.h"
 #include "include/private/base/SkMalloc.h"
 #include "include/private/base/SkMutex.h"
+#include "include/private/base/SkTFitsIn.h"
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
@@ -792,7 +793,8 @@ std::unique_ptr<SkFontData> SkTypeface_FreeType::cloneFontData(const SkFontArgum
     int axisCount = axisDefinitions.size();
 
     AutoSTMalloc<4, SkFontArguments::VariationPosition::Coordinate> currentPosition(axisCount);
-    int currentAxisCount = GetVariationDesignPosition(face, {currentPosition, axisCount});
+    int currentAxisCount = GetVariationDesignPosition(face,
+                                                      {currentPosition.data(), (size_t)axisCount});
 
     SkString name;
     AutoSTMalloc<4, SkFixed> axisValues(axisCount);
@@ -1136,7 +1138,7 @@ FT_Error SkScalerContext_FreeType::setupSize() {
 
 bool SkScalerContext_FreeType::getBoundsOfCurrentOutlineGlyph(FT_GlyphSlot glyph, SkRect* bounds) {
     if (glyph->format != FT_GLYPH_FORMAT_OUTLINE) {
-        SkASSERT(false);
+        SkDEBUGFAIL("unexpected format type");
         return false;
     }
     if (0 == glyph->outline.n_contours) {
@@ -1145,6 +1147,16 @@ bool SkScalerContext_FreeType::getBoundsOfCurrentOutlineGlyph(FT_GlyphSlot glyph
 
     FT_BBox bbox;
     FT_Outline_Get_CBox(&glyph->outline, &bbox);
+    // The FreeType docs say these will be 32 bits at most.
+    if (!SkTFitsIn<SkFDot6>(bbox.xMin) || !SkTFitsIn<SkFDot6>(bbox.xMax) ||
+        !SkTFitsIn<SkFDot6>(bbox.yMin) || !SkTFitsIn<SkFDot6>(bbox.yMax)) {
+        return false;
+    }
+
+    if (bbox.xMin >= bbox.xMax || bbox.yMin >= bbox.yMax) {
+        return false;
+    }
+
     *bounds = SkRect::MakeLTRB(SkFDot6ToScalar(bbox.xMin), -SkFDot6ToScalar(bbox.yMax),
                                SkFDot6ToScalar(bbox.xMax), -SkFDot6ToScalar(bbox.yMin));
     return true;
@@ -1398,11 +1410,11 @@ void SkScalerContext_FreeType::generateImage(const SkGlyph& glyph, void* imageBu
         SkASSERT(glyph.maskFormat() == SkMask::kARGB32_Format);
         SkBitmap dstBitmap;
         // TODO: mark this as sRGB when the blits will be sRGB.
-        dstBitmap.setInfo(SkImageInfo::Make(glyph.width(), glyph.height(),
-                                            kN32_SkColorType,
-                                            kPremul_SkAlphaType),
-                                            glyph.rowBytes());
-        dstBitmap.setPixels(imageBuffer);
+        dstBitmap.installPixels(
+                SkImageInfo::Make(
+                        glyph.width(), glyph.height(), kN32_SkColorType, kPremul_SkAlphaType),
+                imageBuffer,
+                glyph.rowBytes());
 
         SkCanvas canvas(dstBitmap);
         if constexpr (kSkShowTextBlitCoverage) {

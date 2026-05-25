@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 #ifndef Metrics_DEFINED
 #define Metrics_DEFINED
 
@@ -9,7 +9,7 @@ namespace skia {
 namespace textlayout {
 class StyleMetrics {
 public:
-    StyleMetrics(const TextStyle* style) : text_style(style) {}
+    explicit StyleMetrics(const TextStyle* style) : text_style(style) {}
 
     StyleMetrics(const TextStyle* style, SkFontMetrics& metrics)
             : text_style(style), font_metrics(metrics) {}

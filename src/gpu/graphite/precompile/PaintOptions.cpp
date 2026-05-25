@@ -80,7 +80,7 @@ void PaintOptions::setClipShaders(SkSpan<const sk_sp<PrecompileShader>> clipShad
     fClipShaderOptions.reserve(2 * clipShaders.size());
     for (const sk_sp<PrecompileShader>& cs : clipShaders) {
         // All clipShaders get wrapped in a CTMShader ...
-        sk_sp<PrecompileShader> withCTM = cs ? PrecompileShadersPriv::CTM({ cs }) : nullptr;
+        sk_sp<PrecompileShader> withCTM = cs ? PrecompileShadersPriv::CTM({{ cs }}) : nullptr;
         // and, if it is a SkClipOp::kDifference clip, an additional ColorFilterShader
         sk_sp<PrecompileShader> inverted =
                 withCTM ? withCTM->makeWithColorFilter(PrecompileColorFilters::Blend())
@@ -157,7 +157,6 @@ void PaintOptions::createKey(const KeyContext& keyContext,
                              bool addPrimitiveBlender,
                              bool addAnalyticClip,
                              Coverage coverage) const {
-    SkDEBUGCODE(keyContext.paintParamsKeyBuilder()->checkReset();)
     SkASSERT(desiredCombination < this->numCombinations());
 
     const int numClipShaderCombos = this->numClipShaderCombinations();
@@ -191,9 +190,6 @@ void PaintOptions::createKey(const KeyContext& keyContext,
         finalBlender = { PrecompileBlenders::Mode(SkBlendMode::kSrcOver), 0 };
     }
 
-    PrecompileBlender* blender = finalBlender.first.get();
-    std::optional<SkBlendMode> blendMode = blender ? blender->priv().asBlendMode()
-                                                   : SkBlendMode::kSrcOver;
     PaintOption option(fPaintColorIsOpaque,
                        finalBlender,
                        PrecompileBase::SelectOption(SkSpan(fShaderOptions),
@@ -204,10 +200,8 @@ void PaintOptions::createKey(const KeyContext& keyContext,
                        fPrimitiveBlendMode,
                        fSkipColorXform,
                        clipShader,
-                       /*dstReadRequired=*/!CanUseHardwareBlending(keyContext.caps(),
-                                                                   targetFormat,
-                                                                   blendMode,
-                                                                   coverage),
+                       coverage,
+                       targetFormat,
                        fDither,
                        addAnalyticClip);
 
@@ -226,7 +220,7 @@ void create_image_drawing_pipelines(const KeyContext& keyContext,
     sk_sp<PrecompileShader> imageShader = PrecompileShaders::Image(
             PrecompileShaders::ImageShaderFlags::kNoAlphaNoCubic);
 
-    imagePaintOptions.setShaders({ imageShader });
+    imagePaintOptions.setShaders({{ imageShader }});
     imagePaintOptions.setBlendModes(orig.getBlendModes());
     imagePaintOptions.setBlenders(orig.getBlenders());
     imagePaintOptions.setColorFilters(orig.getColorFilters());
@@ -303,20 +297,29 @@ void PaintOptions::buildCombinations(
         }
     } else {
         int numCombinations = this->numCombinations();
+
+        // This matches the logic in Device::drawGeometry() that optimizes inner-fill capable and
+        // non-AA draws to disable HW blending when possible.
+        KeyContext finalContext = keyContext;
+        if (drawTypes & kSimpleShape || coverage == Coverage::kNone) {
+            finalContext = keyContext.withExtraFlags(KeyGenFlags::kPreferFixedSrcBlend);
+        }
+
         for (int i = 0; i < numCombinations; ++i) {
             // Since the precompilation path's uniforms aren't used and don't change the key,
             // the exact layout doesn't matter
 
             keyContext.pipelineDataGatherer()->resetForDraw();
+            keyContext.paintParamsKeyBuilder()->resetForDraw();
 
-            this->createKey(keyContext, renderPassDesc.fColorAttachment.fFormat,
+            this->createKey(finalContext, renderPassDesc.fColorAttachment.fFormat,
                             i, withPrimitiveBlender,
                             SkToBool(drawTypes & DrawTypeFlags::kAnalyticClip), coverage);
 
-            // The 'findOrCreate' calls lockAsKey on builder and then destroys the returned
-            // PaintParamsKey. This serves to reset the builder.
-            UniquePaintParamsID paintID = keyContext.dict()->findOrCreate(
-                    keyContext.paintParamsKeyBuilder());
+            // Reset the builder after we get the paintID, we don't need the key anymore
+            // for precompilation.
+            UniquePaintParamsID paintID = finalContext.dict()->findOrCreate(
+                    finalContext.paintParamsKeyBuilder());
 
             processCombination(paintID, drawTypes, withPrimitiveBlender, coverage, renderPassDesc);
         }

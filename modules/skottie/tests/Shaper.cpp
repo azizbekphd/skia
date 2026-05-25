@@ -1,16 +1,25 @@
 /*
- * Copyright 2022 Google Inc.
+ * Copyright 2022 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
+#include <cstddef>
+#include <cstdint>
+#include <initializer_list>
+#include <memory>
+
+#include "include/core/SkData.h"
 #include "include/core/SkFontMgr.h"
+#include "include/core/SkStream.h"
 #include "modules/skottie/include/TextShaper.h"
 #include "modules/skshaper/utils/FactoryHelpers.h"
+#include "modules/skunicode/include/SkUnicode.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/FontToolUtils.h"
+#include "tools/fonts/TestFontMgr.h"
 
 using namespace skottie;
 
@@ -351,5 +360,229 @@ DEF_TEST(Skottie_Shaper_ExplicitFontMgr, reporter) {
     }
 }
 
-#endif
+namespace skottie {
+std::unique_ptr<SkBreakIterator> MakeIntersectingBreakIteratorForTesting(
+    std::unique_ptr<SkBreakIterator>, std::unique_ptr<SkBreakIterator>);
+}
 
+DEF_TEST(Skottie_Shaper_breakiter, r) {
+    class MockBreakIterator final : public SkBreakIterator {
+    public:
+        explicit MockBreakIterator(std::vector<Position> brks) : fBreaks(std::move(brks)) {}
+
+        Position first() override {
+            this->reset();
+            return fCurrent;
+        }
+
+        Position current() override {
+            return fCurrent;
+        }
+        Position next() override {
+            if (fIndex < fBreaks.size()) {
+                fCurrent = fBreaks[fIndex++];
+            } else {
+                fCurrent = -1;
+                fDone = true;
+            }
+            return fCurrent;
+        }
+        Status status() override { return 0; }
+        bool isDone() override { return fDone; }
+        bool setText(const char[], int) override {
+            this->reset();
+            return true;
+        }
+        bool setText(const char16_t[], int) override {
+            this->reset();
+            return true;
+        }
+
+    private:
+        void reset() {
+            fCurrent = 0;
+            fIndex = 0;
+            fDone = false;
+        }
+
+        const std::vector<Position> fBreaks;
+        Position                    fCurrent = 0;
+        bool                        fDone    = false;
+        size_t                      fIndex   = 0;
+    };
+
+    auto do_do_check = [&](const std::unique_ptr<SkBreakIterator>& it,
+                           std::initializer_list<SkBreakIterator::Position> expected) {
+        // Initial state.
+        REPORTER_ASSERT(r, it);
+        REPORTER_ASSERT(r, !it->isDone());
+        REPORTER_ASSERT(r, it->current() == 0);
+
+        for (const auto& pos : expected) {
+            REPORTER_ASSERT(r, it->next() == pos);
+            REPORTER_ASSERT(r, it->current() == pos);
+            REPORTER_ASSERT(r, !it->isDone());
+        }
+
+        // Final state.
+        REPORTER_ASSERT(r, it->next() < 0);
+        REPORTER_ASSERT(r, it->current() < 0);
+        REPORTER_ASSERT(r, it->isDone());
+
+        // One more time for good measure.
+        REPORTER_ASSERT(r, it->next() < 0);
+        REPORTER_ASSERT(r, it->current() < 0);
+        REPORTER_ASSERT(r, it->isDone());
+    };
+
+    auto do_check = [&](std::initializer_list<SkBreakIterator::Position> a,
+                        std::initializer_list<SkBreakIterator::Position> b,
+                        std::initializer_list<SkBreakIterator::Position> expected) {
+        auto it = MakeIntersectingBreakIteratorForTesting(
+            std::make_unique<MockBreakIterator>(std::vector(a)),
+            std::make_unique<MockBreakIterator>(std::vector(b)));
+
+        do_do_check(it, expected);
+
+        // first() resets state.
+        REPORTER_ASSERT(r, it->first() == 0);
+        do_do_check(it, expected);
+
+        // as does setText()
+        REPORTER_ASSERT(r, it->setText("foo", 3));
+        do_do_check(it, expected);
+    };
+
+    auto check = [&](std::initializer_list<SkBreakIterator::Position> a,
+                     std::initializer_list<SkBreakIterator::Position> b,
+                     std::initializer_list<SkBreakIterator::Position> expected) {
+        // Order should not matter.
+        do_check(a, b, expected);
+        do_check(b, a, expected);
+    };
+
+    check({  }, {  },   {  });
+    check({42}, {  },   {  });
+    check({42}, {43},   {  });
+    check({42}, {42},   {42});
+
+    check({1, 3   }, {1, 3},   {1, 3});
+    check({1, 3, 5}, {1, 3},   {1, 3});
+    check({1, 3, 5}, {3, 5},   {3, 5});
+    check({1, 3, 5}, {1, 5},   {1, 5});
+
+    check({1, 3, 5, 7}, {2, 4, 6, 8},   {       });
+    check({1, 3, 5, 7}, {1         },   {1      });
+    check({1, 3, 5, 7}, {1, 5      },   {1, 5   });
+    check({1, 3, 5, 7}, {3, 7      },   {3, 7   });
+    check({1, 3, 5, 7}, {1, 7      },   {1, 7   });
+    check({1, 3, 5, 7}, {1, 3, 7   },   {1, 3, 7});
+    check({1, 3, 5, 7}, {1, 5, 7   },   {1, 5, 7});
+
+    check({1, 5, 9}, {2, 3, 4   },   {       });
+    check({1, 5, 9}, {6, 7, 8   },   {       });
+    check({1, 5, 9}, {2, 3, 7, 8},   {       });
+    check({1, 5, 9}, {1, 2, 3   },   {1      });
+    check({1, 5, 9}, {7, 8, 9   },   {9      });
+    check({1, 5, 9}, {2, 3, 5, 7},   {5      });
+    check({1, 5, 9}, {4, 5, 7, 8},   {5      });
+    check({1, 5, 9}, {1, 2, 3, 5},   {1, 5   });
+    check({1, 5, 9}, {1, 3, 5, 7},   {1, 5   });
+    check({1, 5, 9}, {5, 7, 8, 9},   {5, 9   });
+    check({1, 5, 9}, {3, 5, 7, 9},   {5, 9   });
+    check({1, 5, 9}, {1, 3, 5, 9},   {1, 5, 9});
+    check({1, 5, 9}, {1, 5, 7, 9},   {1, 5, 9});
+}
+
+DEF_TEST(Skottie_Shaper_fallback_metrics, reporter) {
+    const SkString text("Foo 推动全球交通可");
+    const Shaper::TextDesc desc = {
+        .fTypeface = ToolUtils::DefaultTypeface(),
+        .fTextSize = 18,
+        .fLineHeight = 18,
+        .fFlags = Shaper::kFragmentGlyphs | Shaper::kTrackFragmentAdvanceAscent,
+    };
+    const auto result =
+        Shaper::Shape(text, desc, SkRect::MakeWH(1000, 1000), ToolUtils::TestFontMgr(),
+            SkShapers::BestAvailable());
+        REPORTER_ASSERT(reporter, !result.fFragments.empty());
+
+    for (const auto& frag : result.fFragments) {
+        REPORTER_ASSERT(reporter, frag.fAdvance > 0);
+    }
+}
+
+#endif // SK_SHAPER_HARFBUZZ_AVAILABLE && !SK_BUILD_FOR_WIN
+
+#if defined(SK_SHAPER_CORETEXT_AVAILABLE)
+#include "modules/skshaper/include/SkShaper_coretext.h"
+
+DEF_TEST(Skottie_Shaper_CTStrict, r) {
+    const Shaper::TextDesc desc = {
+        .fTypeface  = ToolUtils::DefaultTypeface(),
+        .fTextSize  = 64,
+        .fLinebreak = Shaper::LinebreakPolicy::kParagraph,
+        .fFlags     = Shaper::kFragmentGlyphs, // need fragmented glyphs for line info
+    };
+    const SkRect box = SkRect::MakeWH(120, 800); // roughly 3 glyphs wide
+    const auto fontmgr = ToolUtils::TestFontMgr();
+
+    using SkShapers::CT::LineBreakMode;
+
+    static const struct {
+        const char*           txt;
+        std::vector<uint32_t> line_map;
+        LineBreakMode         lbm = LineBreakMode::kDefault;
+    } tests[] = {
+        {""   , {0}},
+        {""   , {0}, LineBreakMode::kStrict},
+
+        {"foo", {0, 0, 0}},
+        {"foo", {0, 0, 0}, LineBreakMode::kStrict},
+
+        {"  foo  ", {0, 0, 1, 1, 1, 1, 1}},
+        {"  foo  ", {0, 0, 1, 1, 1, 1, 1}, LineBreakMode::kStrict},
+
+        {"foo bar", {0, 0, 0, 0, 1, 1, 1}},
+        {"foo bar", {0, 0, 0, 0, 1, 1, 1}, LineBreakMode::kStrict},
+
+        {"  foo bar  ", {0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2}},
+        {"  foo bar  ", {0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2}, LineBreakMode::kStrict},
+
+        {"foobar", {0, 0, 0, 1, 1, 1}},
+        {"foobar", {0, 0, 0, 0, 0, 0}, LineBreakMode::kStrict},
+
+        {"  foobar  ", {0, 0, 1, 1, 1, 2, 2, 2, 2, 2}},
+        {"  foobar  ", {0, 0, 1, 1, 1, 1, 1, 1, 2, 2}, LineBreakMode::kStrict},
+
+        {"f oobar", {0, 0, 1, 1, 1, 2, 2}},
+        {"f oobar", {0, 0, 1, 1, 1, 1, 1}, LineBreakMode::kStrict},
+
+        {"  f oobar  ", {0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 2}},
+        {"  f oobar  ", {0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2}, LineBreakMode::kStrict},
+
+        {"fooba r", {0, 0, 0, 1, 1, 1, 1}},
+        {"fooba r", {0, 0, 0, 0, 0, 1, 1}, LineBreakMode::kStrict},
+
+        {"  fooba r  ", {0, 0, 1, 1, 1, 2, 2, 2, 2, 2, 2}},
+        {"  fooba r  ", {0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2}, LineBreakMode::kStrict},
+
+        {"f oobarba z", {0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3}},
+        {"f oobarba z", {0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2}, LineBreakMode::kStrict},
+
+        {"  f oobarba z  ", {0, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3}},
+        {"  f oobarba z  ", {0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2}, LineBreakMode::kStrict},
+    };
+
+    for (const auto& tst : tests) {
+        auto fact = sk_make_sp<SkShapers::CoreTextFactory>(tst.lbm);
+        auto res = Shaper::Shape(SkString(tst.txt), desc, box, fontmgr, fact);
+
+        REPORTER_ASSERT(r, res.fFragments.size() == tst.line_map.size());
+        for (size_t i = 0; i < res.fFragments.size(); ++i) {
+            REPORTER_ASSERT(r, res.fFragments[i].fLineIndex == tst.line_map[i]);
+        }
+    }
+}
+
+#endif  // SK_SHAPER_CORETEXT_AVAILABLE

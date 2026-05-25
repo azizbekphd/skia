@@ -12,6 +12,7 @@
 #include "include/core/SkColorType.h"
 #include "include/core/SkRefCnt.h"
 #include "src/gpu/graphite/Caps.h"
+#include "src/gpu/graphite/Renderer.h"
 
 namespace skgpu::graphite {
 
@@ -34,7 +35,8 @@ public:
                 SkBlendMode primitiveBlendMode,
                 bool skipColorXform,
                 const std::pair<sk_sp<PrecompileShader>, int>& clipShader,
-                bool dstReadRequired,
+                Coverage coverage,
+                TextureFormat targetFormat,
                 bool dither,
                 bool analyticClip);
 
@@ -43,13 +45,16 @@ public:
     void toKey(const KeyContext&) const;
 
 private:
-    void addPaintColorToKey(const KeyContext&) const;
-    void handlePrimitiveColor(const KeyContext&) const;
-    void handlePaintAlpha(const KeyContext&) const;
-    void handleColorFilter(const KeyContext&) const;
-    bool shouldDither(SkColorType dstCT) const;
-    void handleDithering(const KeyContext&) const;
+    // These all return true if the resulting PaintOption is known to be opaque; false otherwise.
+    bool addPaintColorToKey(const KeyContext&) const;
+    bool handlePrimitiveColor(const KeyContext&) const;
+    bool handlePaintAlpha(const KeyContext&) const;
+    bool handleColorFilter(const KeyContext&) const;
+    bool handleDithering(const KeyContext&) const;
+
     void handleClipping(const KeyContext&) const;
+
+    bool shouldDither(SkColorType dstCT) const;
 
     bool fOpaquePaintColor;
     std::pair<sk_sp<PrecompileBlender>, int> fFinalBlender;
@@ -59,7 +64,8 @@ private:
     bool fHasPrimitiveBlender;
     bool fSkipColorXform;
     std::pair<sk_sp<PrecompileShader>, int> fClipShader;
-    bool fDstReadRequired;
+    Coverage fRendererCoverage;
+    TextureFormat fTargetFormat;
     bool fDither;
     bool fAnalyticClip;
 };

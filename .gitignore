@@ -3,6 +3,7 @@
 *.iml
 *.perfetto-trace
 .DS_Store
+.agents
 .android_config
 .gclient*
 .gradle
@@ -13,8 +14,11 @@
 .recipe_deps/
 .settings/
 .vscode/
+.vs/
 .win_toolchain/
 TAGS
+agents/internal/
+agents/shared/
 bower_components
 imgui.ini
 infra/bots/gen_tasks_aux.go
@@ -67,3 +71,6 @@ target/
 # A user is free to specify custom builds or options here without them being checked in.
 bazel/user/buildrc
 modules/canvaskit/apply.sh
+
+# Coding Agents put workspace state here - we don't want to check that in.
+.gemini

@@ -150,7 +150,9 @@ public:
         SkASSERT(!fLockStride && !fVertices && !fVertexBuffer && !fVertexData);
         SkASSERT(stride && eagerCount);
 
-        size_t size = eagerCount * stride;
+        // Matches sk_malloc_throw(stride, count) but lets use the size earlier.
+        size_t size = SkSafeMath::Mul(eagerCount, stride);
+
         fVertexBuffer = fResourceProvider->createBuffer(size,
                                                         GrGpuBufferType::kVertex,
                                                         kStatic_GrAccessPattern,
@@ -162,7 +164,7 @@ public:
             fVertices = fVertexBuffer->map();
         }
         if (!fVertices) {
-            fVertices = sk_malloc_throw(eagerCount * stride);
+            fVertices = sk_malloc_throw(size);
             fCanMapVB = false;
         }
         fLockStride = stride;
@@ -271,9 +273,7 @@ public:
 private:
     SkPath getPath() const {
         SkASSERT(!fShape.style().applies());
-        SkPath path;
-        fShape.asPath(&path);
-        return path;
+        return fShape.asPath();
     }
 
     static void CreateKey(skgpu::UniqueKey* key,
@@ -284,8 +284,7 @@ private:
         bool inverseFill = shape.inverseFilled();
 
         static constexpr int kClipBoundsCnt = sizeof(devClipBounds) / sizeof(uint32_t);
-        int shapeKeyDataCnt = shape.unstyledKeySize();
-        SkASSERT(shapeKeyDataCnt >= 0);
+        uint16_t shapeKeyDataCnt = shape.unstyledKeySize();
         skgpu::UniqueKey::Builder builder(key, kDomain, shapeKeyDataCnt + kClipBoundsCnt, "Path");
         shape.writeUnstyledKey(&builder[0]);
         // For inverse fills, the tessellation is dependent on clip bounds.
@@ -315,8 +314,7 @@ private:
         vmi.mapRect(&clipBounds);
 
         SkASSERT(!shape.style().applies());
-        SkPath path;
-        shape.asPath(&path);
+        SkPath path = shape.asPath();
 
         return GrTriangulator::PathToTriangles(path, tol, clipBounds, allocator, isLinear);
     }
@@ -391,12 +389,11 @@ private:
     void createAAMesh(GrMeshDrawTarget* target) {
         SkASSERT(!fVertexData);
         SkASSERT(fAntiAlias);
-        SkPath path = this->getPath();
+        SkPath path = this->getPath().makeTransform(fViewMatrix);
         if (path.isEmpty()) {
             return;
         }
         SkRect clipBounds = SkRect::Make(fDevClipBounds);
-        path.transform(fViewMatrix);
         SkScalar tol = GrPathUtils::kDefaultTolerance;
         sk_sp<const GrBuffer> vertexBuffer;
         int firstVertex;
@@ -633,8 +630,7 @@ PathRenderer::CanDrawPath TriangulatingPathRenderer::onCanDrawPath(
         return CanDrawPath::kNo;
     }
 
-    SkPath path;
-    args.fShape->asPath(&path);
+    SkPath path = args.fShape->asPath();
     int verbCount = path.countVerbs();
     // Don't use this path renderer if we exceed the max verb count.
     if (verbCount > kMaxGPUPathRendererVerbs) {

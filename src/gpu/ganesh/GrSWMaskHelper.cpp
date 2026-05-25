@@ -25,6 +25,7 @@
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/geometry/GrShape.h"
 #include "src/gpu/ganesh/geometry/GrStyledShape.h"
+#include "src/gpu/ganesh/image/GrMippedBitmap.h"
 
 #include <cstddef>
 #include <tuple>
@@ -71,13 +72,12 @@ void GrSWMaskHelper::drawShape(const GrStyledShape& shape, const SkMatrix& matri
     translatedMatrix.postTranslate(fTranslate.fX, fTranslate.fY);
     fDraw.fCTM = &translatedMatrix;
 
-    SkPath path;
-    shape.asPath(&path);
+    SkPath path = shape.asPath();
     if (0xFF == alpha) {
         SkASSERT(0xFF == paint.getAlpha());
         fDraw.drawPathCoverage(path, paint);
     } else {
-        fDraw.drawPath(path, paint, nullptr, true);
+        fDraw.drawPath(path, paint, nullptr);
     }
 }
 
@@ -108,13 +108,12 @@ void GrSWMaskHelper::drawShape(const GrShape& shape, const SkMatrix& matrix,
     }
 
     // A complex, or inverse-filled shape, so go through drawPath.
-    SkPath path;
-    shape.asPath(&path);
+    SkPath path = shape.asPath();
     if (0xFF == alpha) {
         SkASSERT(0xFF == paint.getAlpha());
         fDraw.drawPathCoverage(path, paint);
     } else {
-        fDraw.drawPath(path, paint, nullptr, true);
+        fDraw.drawPath(path, paint, nullptr);
     }
 }
 
@@ -140,11 +139,15 @@ GrSurfaceProxyView GrSWMaskHelper::toTextureView(GrRecordingContext* rContext, S
     SkImageInfo ii = SkImageInfo::MakeA8(fPixels->width(), fPixels->height());
     size_t rowBytes = fPixels->rowBytes();
 
-    SkBitmap bitmap;
-    SkAssertResult(bitmap.installPixels(ii, fPixels->detachPixels(), rowBytes,
-                                        [](void* addr, void* context) { sk_free(addr); },
-                                        nullptr));
-    bitmap.setImmutable();
-
-    return std::get<0>(GrMakeUncachedBitmapProxyView(rContext, bitmap, skgpu::Mipmapped::kNo, fit));
+    std::optional<GrMippedBitmap> bitmap = GrMippedBitmap::Make(
+            ii,
+            fPixels->detachPixels(),
+            rowBytes,
+            [](void* addr, void* context) { sk_free(addr); },
+            nullptr);
+    if (!bitmap) {
+        return {};
+    }
+    return std::get<0>(
+            GrMakeUncachedBitmapProxyView(rContext, bitmap.value(), skgpu::Mipmapped::kNo, fit));
 }

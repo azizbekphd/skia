@@ -22,7 +22,7 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkGradient.h"
 #include "tools/ToolUtils.h"
 #include "tools/fonts/FontToolUtils.h"
 
@@ -208,9 +208,7 @@ protected:
         canvas->drawRRect(left, rrectPaint);
 
         const SkRRect right = rr.makeOffset(2 * kCellSize + paddingX, paddingY + cellY);
-        SkPath rightPath;
-        rightPath.addRRect(right);
-        canvas->drawPath(rightPath, rrectPaint);
+        canvas->drawPath(SkPath::RRect(right), rrectPaint);
 
         // In an ideal world, there would be no diffs at all between the two drawing
         // methods. The point of this gm is to show those differences and allow us to

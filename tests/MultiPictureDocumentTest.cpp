@@ -16,6 +16,7 @@
 #include "include/core/SkImageInfo.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPathBuilder.h"
 #include "include/core/SkPicture.h"
 #include "include/core/SkPictureRecorder.h"
 #include "include/core/SkRRect.h"
@@ -64,8 +65,9 @@ static void draw_basic(SkCanvas* canvas, int seed, sk_sp<SkImage> image) {
     paint.setColor(SK_ColorYELLOW);
     canvas->drawRoundRect(rect, 10, 10, paint);
 
-    SkPath path;
-    path.cubicTo(768, 0, -512, 256, 256, 256);
+    SkPath path = SkPathBuilder()
+                  .cubicTo(768, 0, -512, 256, 256, 256)
+                  .detach();
     paint.setColor(SK_ColorGREEN);
     canvas->drawPath(path, paint);
 
@@ -104,7 +106,7 @@ DEF_TEST(SkMultiPictureDocument_Serialize_and_deserialize, reporter) {
     SkSharingSerialContext ctx;
     ctx.setDirectContext(nullptr);
     SkSerialProcs procs;
-    procs.fImageProc = SkSharingSerialContext::serializeImage;
+    procs.fImageProc = SkSharingContext::serializeImage;
     procs.fImageCtx = &ctx;
 
     // Create the multi picture document used for recording frames.
@@ -150,7 +152,7 @@ DEF_TEST(SkMultiPictureDocument_Serialize_and_deserialize, reporter) {
     // Set up deserialization
     SkSharingDeserialContext deserialContext;
     SkDeserialProcs dprocs;
-    dprocs.fImageProc = SkSharingDeserialContext::deserializeImage;
+    dprocs.fImageDataProc = SkSharingContext::deserializeImage;
     dprocs.fImageCtx = &deserialContext;
 
     // Confirm data is a MultiPictureDocument
@@ -350,7 +352,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkMultiPictureDocument_AHardwarebuffer,
     SkSharingSerialContext ctx;
     ctx.setDirectContext(context);
     SkSerialProcs procs;
-    procs.fImageProc = SkSharingSerialContext::serializeImage;
+    procs.fImageProc = SkSharingContext::serializeImage;
     procs.fImageCtx = &ctx;
 
     // Create the multi picture document used for recording frames.
@@ -396,7 +398,7 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SkMultiPictureDocument_AHardwarebuffer,
     // Set up deserialization
     SkSharingDeserialContext deserialContext;
     SkDeserialProcs dprocs;
-    dprocs.fImageProc = SkSharingDeserialContext::deserializeImage;
+    dprocs.fImageDataProc = SkSharingContext::deserializeImage;
     dprocs.fImageCtx = &deserialContext;
 
     // Confirm data is a MultiPictureDocument

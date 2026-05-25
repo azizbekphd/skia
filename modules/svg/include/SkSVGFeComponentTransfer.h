@@ -1,5 +1,5 @@
 /*
- * Copyright 2024 Google Inc.
+ * Copyright 2024 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -54,7 +54,7 @@ protected:
     bool parseAndSetAttribute(const char*, const char*) override;
 
 private:
-    SkSVGFeFunc(SkSVGTag tag) : INHERITED(tag) {}
+    explicit SkSVGFeFunc(SkSVGTag tag) : SkSVGHiddenContainer(tag) {}
 
     using INHERITED = SkSVGHiddenContainer;
 };

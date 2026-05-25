@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google Inc.
+ * Copyright 2018 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -137,7 +137,7 @@ void GrGradientBitmapCache::fillGradient(const SkPMColor4f* colors,
                                          const SkScalar* positions,
                                          int count,
                                          bool colorsAreOpaque,
-                                         const SkGradientShader::Interpolation& interpolation,
+                                         const SkGradient::Interpolation& interpolation,
                                          const SkColorSpace* intermediateColorSpace,
                                          const SkColorSpace* dstColorSpace,
                                          SkBitmap* bitmap) {
@@ -158,7 +158,7 @@ void GrGradientBitmapCache::getGradient(const SkPMColor4f* colors,
                                         const SkScalar* positions,
                                         int count,
                                         bool colorsAreOpaque,
-                                        const SkGradientShader::Interpolation& interpolation,
+                                        const SkGradient::Interpolation& interpolation,
                                         const SkColorSpace* intermediateColorSpace,
                                         const SkColorSpace* dstColorSpace,
                                         SkColorType colorType,

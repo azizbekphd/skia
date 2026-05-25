@@ -23,7 +23,7 @@
 #include "src/gpu/graphite/RecorderPriv.h"
 #include "src/gpu/graphite/Surface_Graphite.h"
 #include "src/image/SkImage_Base.h"
-#include "tests/TestUtils.h"
+#include "tests/ComparePixels.h"
 #include "tools/ToolUtils.h"
 #include "tools/graphite/GraphiteToolUtils.h"
 
@@ -165,6 +165,7 @@ bool check_img(skiatest::Reporter* reporter,
                Context* context,
                Recorder* recorder,
                SkImage* imageToDraw,
+               bool useShader,
                Mipmapped mipmapped,
                const char* testcase,
                const SkColor4f& expectedColor) {
@@ -191,9 +192,16 @@ bool check_img(skiatest::Reporter* reporter,
                 ? SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kNearest)
                 : SkSamplingOptions(SkFilterMode::kLinear);
 
-        canvas->drawImageRect(imageToDraw,
-                              SkRect::MakeWH(kSurfaceSize.width(), kSurfaceSize.height()),
-                              sampling);
+        SkRect rectToDraw = SkRect::MakeWH(kSurfaceSize.width(), kSurfaceSize.height());
+        if (useShader) {
+            SkPaint imagePaint;
+            SkMatrix localMatrix = SkMatrix::RectToRect(SkRect::Make(imageToDraw->bounds()),
+                                                        rectToDraw);
+            imagePaint.setShader(imageToDraw->makeShader(sampling, &localMatrix));
+            canvas->drawRect(rectToDraw, imagePaint);
+        } else {
+            canvas->drawImageRect(imageToDraw, rectToDraw, sampling);
+        }
 
         if (!surface->readPixels(pm, 0, 0)) {
             ERRORF(reporter, "readPixels failed");
@@ -204,9 +212,10 @@ bool check_img(skiatest::Reporter* reporter,
     auto error = std::function<ComparePixmapsErrorReporter>(
             [&](int x, int y, const float diffs[4]) {
                 ERRORF(reporter,
-                       "case %s %s: expected (%.1f %.1f %.1f %.1f) got (%.1f, %.1f, %.1f, %.1f)",
+                       "case %s %s %s: expected (%.1f %.1f %.1f %.1f) got (%.1f, %.1f, %.1f, %.1f)",
                        testcase,
                        (mipmapped == Mipmapped::kYes) ? "w/ mipmaps" : "w/o mipmaps",
+                       useShader ? "imageShader" : "drawImageRect",
                        expectedColor.fR, expectedColor.fG, expectedColor.fB, expectedColor.fA,
                        expectedColor.fR-diffs[0], expectedColor.fG-diffs[1],
                        expectedColor.fB-diffs[2], expectedColor.fA-diffs[3]);
@@ -232,10 +241,12 @@ void run_test(skiatest::Reporter* reporter,
 
     for (auto t : testcases) {
         for (auto mm : { Mipmapped::kNo, Mipmapped::kYes }) {
-            sk_sp<SkImage> image = t.fFactory(recorder);
+            for (bool useShader : { false, true }) {
+                sk_sp<SkImage> image = t.fFactory(recorder);
 
-            check_img(reporter, context, recorder, image.get(), mm,
-                      t.fTestCase, t.fExpectedColors[static_cast<int>(mm)]);
+                check_img(reporter, context, recorder, image.get(), useShader, mm,
+                        t.fTestCase, t.fExpectedColors[static_cast<int>(mm)]);
+            }
         }
     }
 }
@@ -427,18 +438,29 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(Make_TextureImage_Subset_Test, reporter
 
 namespace {
 
+// NOTE: makeColorTypeAndSpace relies on rendering; depending on the path renderer strategy, this
+// also can require that it support MSAA attachments (required at a higher level in Device).
+// Technically, these internal operations wouldn't trigger MSAA, but there isn't a system to have
+// internal surfaces skip that validation. b/507427401 would address this, in which case we can
+// remove the MSAA checks.
 SkColorType pick_colortype(const Caps* caps, bool mipmapped) {
     auto mm = mipmapped ? skgpu::Mipmapped::kYes : skgpu::Mipmapped::kNo;
     TextureInfo info = caps->getDefaultSampledTextureInfo(
             kRGB_565_SkColorType, mm, skgpu::Protected::kNo, skgpu::Renderable::kYes);
-    if (info.isValid()) {
+    if (info.isValid() && caps->getCompatibleMSAASampleCount(info) > SampleCount::k1) {
         return kRGB_565_SkColorType;
     }
 
     info = caps->getDefaultSampledTextureInfo(
             kRGBA_F16_SkColorType, mm, skgpu::Protected::kNo, skgpu::Renderable::kYes);
-    if (info.isValid()) {
+    if (info.isValid() && caps->getCompatibleMSAASampleCount(info) > SampleCount::k1) {
         return kRGBA_F16_SkColorType;
+    }
+
+    info = caps->getDefaultSampledTextureInfo(
+            kRGBA_1010102_SkColorType, mm, skgpu::Protected::kNo, skgpu::Renderable::kYes);
+    if (info.isValid() && caps->getCompatibleMSAASampleCount(info) > SampleCount::k1) {
+        return kRGBA_1010102_SkColorType;
     }
 
     return kUnknown_SkColorType;
@@ -494,6 +516,10 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(MakeColorSpace_Test, reporter, context,
             }
 
             SkColorType altCT = pick_colortype(caps, mipmapped);
+            if (altCT == kUnknown_SkColorType) {
+                // Unsupported on current device
+                continue;
+            }
             i = orig->makeColorTypeAndColorSpace(recorder.get(), altCT, spin, {mipmapped});
 
             REPORTER_ASSERT(reporter, i != nullptr);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Google Inc.
+ * Copyright 2020 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -29,7 +29,7 @@ namespace skiatest {
 namespace skgpu::graphite {
     class Context;
     class Recorder;
-};
+}
 
 #define DECLARE_VK_PROC(name) PFN_vk##name fVk##name
 
@@ -49,7 +49,7 @@ public:
     virtual skgpu::graphite::Context* context() { return nullptr; }
 
 protected:
-    VkTestHelper(bool isProtected) : fIsProtected(isProtected) {}
+    explicit VkTestHelper(bool isProtected) : fIsProtected(isProtected) {}
 
     bool setupBackendContext();
     virtual bool init() = 0;

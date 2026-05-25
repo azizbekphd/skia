@@ -85,6 +85,7 @@ skia_filegroup(
         ":sksl_folding_tests",
         ":sksl_rte_tests",
         ":sksl_shared_tests",
+        ":sksl_skrp_tests",
     ],
     visibility = ["//tools/skslc:__pkg__"],
 )
@@ -284,6 +285,8 @@ skia_filegroup(
         "errors/FloatRemainder.rts",
         "errors/ForInitStmt.sksl",
         "errors/ForLoopInductionVariableScope.sksl",
+        "errors/ForLoopNEQOverflow.rts",
+        "errors/ForLoopOverflow.rts",
         "errors/ForTypeMismatch.rts",
         "errors/FunctionParamBadType.rts",
         "errors/FunctionParamShadowedByLocal.rts",
@@ -907,6 +910,10 @@ skia_filegroup(
         "intrinsics/Step.sksl",
         "intrinsics/Tan.sksl",
         "intrinsics/Tanh.sksl",
+        "intrinsics/TextureReadImage.sksl",
+        "intrinsics/TextureReadSampler.sksl",
+        "intrinsics/TextureSizeImage.sksl",
+        "intrinsics/TextureSizeSampler.sksl",
         "intrinsics/Transpose.sksl",
         "intrinsics/Trunc.sksl",
         "intrinsics/UintBitsToFloat.sksl",
@@ -1089,6 +1096,7 @@ skia_filegroup(
         "shared/UnaryPositiveNegative.sksl",
         "shared/UniformArray.sksl",
         "shared/UniformBuffers.sksl",
+        "shared/UniformMatrixArray.sksl",
         "shared/UniformMatrixResize.sksl",
         "shared/UnusedVariables.sksl",
         "shared/VectorConstructors.sksl",
@@ -1181,6 +1189,7 @@ skia_filegroup(
         "wgsl/CastVec4ToMat2x2.sksl",
         "wgsl/EntrypointIsWrittenLast.sksl",
         "wgsl/Equality.sksl",
+        "wgsl/ForLoopComplexCondAndNext.sksl",
         "wgsl/FunctionCallDependencies.sksl",
         "wgsl/GlobalUniforms.sksl",
         "wgsl/IfStatement.sksl",
@@ -1189,8 +1198,10 @@ skia_filegroup(
         "wgsl/MainDoesNotHaveFragCoordParameter.sksl",
         "wgsl/MainHasVoidReturn.sksl",
         "wgsl/MatrixConstructorDiagonal.sksl",
+        "wgsl/NoF16Support.sksl",
         "wgsl/OutParams.sksl",
         "wgsl/PixelLocalStorage.sksl",
+        "wgsl/PolyfillIntrinsics.sksl",
         "wgsl/Sample.sksl",
         "wgsl/SubpassInput.sksl",
         "wgsl/TextureIntrinsics.compute",
@@ -1199,5 +1210,13 @@ skia_filegroup(
         "wgsl/UserDefinedPipelineIO.sksl",
         "wgsl/VertexPositionOutputIsAlwaysDeclared.vert",
         "wgsl/WorkgroupSize.compute",
+        "workarounds/LastFragColor.sksl",
+    ],
+)
+
+skia_filegroup(
+    name = "sksl_skrp_tests",
+    srcs = [
+        "skrp/ImmediateOpsOpt.sksl",
     ],
 )

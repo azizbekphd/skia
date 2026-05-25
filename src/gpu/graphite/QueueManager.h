@@ -63,8 +63,9 @@ public:
                                      ResourceProvider*,
                                      SkSpan<const sk_sp<Buffer>> buffersToAsyncMap = {});
 
-    [[nodiscard]] bool submitToGpu();
+    [[nodiscard]] bool submitToGpu(const SubmitInfo&);
     [[nodiscard]] bool hasUnfinishedGpuWork();
+    [[nodiscard]] bool hasPendingGPUWork() const;
     void checkForFinishedWork(SyncToCpu);
 
 #if defined(GPU_TEST_UTILS)
@@ -76,7 +77,7 @@ public:
 
     virtual void tick() const {}
 
-    void addUploadBufferManagerRefs(UploadBufferManager*);
+    void addUploadBufferManagerRefs(UploadBufferManager*, ResourceProvider*);
 
 protected:
     QueueManager(const SharedContext* sharedContext);
@@ -88,7 +89,7 @@ protected:
 
 private:
     virtual std::unique_ptr<CommandBuffer> getNewCommandBuffer(ResourceProvider*, Protected) = 0;
-    virtual OutstandingSubmission onSubmitToGpu() = 0;
+    virtual OutstandingSubmission onSubmitToGpu(const SubmitInfo&) = 0;
 
     bool setupCommandBuffer(ResourceProvider*, Protected);
 

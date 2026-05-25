@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(skcanvas_paint, 256, 256, false, 5) {
@@ -26,8 +26,7 @@ void draw(SkCanvas* canvas) {
     paint.setColor(SK_ColorYELLOW);
     canvas->drawRoundRect(rect, 10, 10, paint);
 
-    SkPath path;
-    path.cubicTo(768, 0, -512, 256, 256, 256);
+    SkPath path = SkPathBuilder().cubicTo(768, 0, -512, 256, 256, 256).detach();
     paint.setColor(SK_ColorGREEN);
     canvas->drawPath(path, paint);
 

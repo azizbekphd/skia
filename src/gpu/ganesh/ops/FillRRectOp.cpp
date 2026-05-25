@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google Inc.
+ * Copyright 2018 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -645,7 +645,7 @@ void FillRRectOpImpl::onPrepareDraws(GrMeshDrawTarget* target) {
     size_t instanceStride = fProgramInfo->geomProc().instanceStride();
 
     if (VertexWriter instanceWriter = target->makeVertexWriter(instanceStride, fInstanceCount,
-                                                               &fInstanceBuffer, &fBaseInstance)) {
+                                                               &fInstanceBuffer, &fBaseInstance)) SK_LIKELY {
         SkDEBUGCODE(auto end = instanceWriter.mark(instanceStride * fInstanceCount));
         for (Instance* i = fHeadInstance; i; i = i->fNext) {
             auto [l, t, r, b] = i->fRRect.rect();

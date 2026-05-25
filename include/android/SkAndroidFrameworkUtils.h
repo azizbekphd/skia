@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google Inc.
+ * Copyright 2017 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -12,8 +12,6 @@
 #include "include/core/SkPoint.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTileMode.h"
-
-#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
 
 class SkCanvas;
 struct SkIRect;
@@ -83,7 +81,5 @@ public:
 
     static bool ShaderAsALinearGradient(SkShader* shader, LinearGradientInfo*);
 };
-
-#endif // SK_BUILD_FOR_ANDROID_ANDROID
 
 #endif // SkAndroidFrameworkUtils_DEFINED

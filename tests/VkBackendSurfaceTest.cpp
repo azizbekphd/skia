@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google Inc.
+ * Copyright 2018 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -33,8 +33,8 @@
 #include "src/gpu/ganesh/vk/GrVkTexture.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
+#include "tools/ganesh/ProxyUtils.h"
 #include "tools/gpu/ManagedBackendTexture.h"
-#include "tools/gpu/ProxyUtils.h"
 
 #include <vulkan/vulkan_core.h>
 
@@ -88,7 +88,8 @@ DEF_GANESH_TEST_FOR_VULKAN_CONTEXT(VkDRMModifierTest, reporter, ctxInfo, CtsEnfo
     REPORTER_ASSERT(reporter, ok);
     REPORTER_ASSERT(reporter, GrBackendTexture::TestingOnly_Equals(actual, drmBETex));
 
-    auto [view, _] = skgpu::ganesh::AsView(dContext, drmImage, Mipmapped::kNo);
+    auto [view, _] = skgpu::ganesh::AsView(dContext, drmImage, Mipmapped::kNo,
+                                           /*targetSurface=*/nullptr);
     REPORTER_ASSERT(reporter, view);
     const GrSurfaceProxy* proxy = view.proxy();
     REPORTER_ASSERT(reporter, proxy);

@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Pixmap_readPixels, 256, 128, false, 0) {
@@ -9,11 +9,11 @@ void draw(SkCanvas* canvas) {
     pixels.resize(height * width * 4);
     SkImageInfo srcInfo = SkImageInfo::MakeN32Premul(width, height);
     SkPixmap srcPixmap(srcInfo, (const void*) &pixels.front(), width * 4);
-    SkColor  gradColors[] = { 0xFFAA3300, 0x7F881122 };
-    SkPoint  gradPoints[] = { { 0, 0 }, { 256, 0 } };
+    SkColor4f gradColors[] = { SkColor4f::FromColor(0xFFAA3300), SkColor4f::FromColor(0x7F881122) };
+    SkPoint gradPoints[] = { { 0, 0 }, { 256, 0 } };
     SkPaint paint;
-    paint.setShader(SkGradientShader::MakeLinear(gradPoints, gradColors, nullptr,
-                    std::size(gradColors), SkTileMode::kClamp));
+    paint.setShader(SkShaders::LinearGradient(gradPoints,
+                                              {{gradColors, {}, SkTileMode::kClamp}, {}}));
     SkBitmap bitmap;
     bitmap.installPixels(srcPixmap);
     SkCanvas srcCanvas(bitmap);

@@ -84,6 +84,7 @@ static DEFINE_bool(run_paragraph_tests_needing_system_fonts, true,
 using namespace skia::textlayout;
 namespace {
 
+SkScalar EPSILON1000 = 0.001f;
 SkScalar EPSILON100 = 0.01f;
 SkScalar EPSILON50 = 0.02f;
 SkScalar EPSILON20 = 0.05f;
@@ -1274,19 +1275,19 @@ UNIX_ONLY_TEST(SkParagraph_RainbowParagraph, reporter) {
             switch (index) {
                 case 0:
                     REPORTER_ASSERT(reporter, style.equals(text_style1));
-                    REPORTER_ASSERT(reporter, equal(impl->text().begin(), textRange, text1));
+                    REPORTER_ASSERT(reporter, equal(impl->text().data(), textRange, text1));
                     break;
                 case 1:
                     REPORTER_ASSERT(reporter, style.equals(text_style2));
-                    REPORTER_ASSERT(reporter, equal(impl->text().begin(), textRange, text2));
+                    REPORTER_ASSERT(reporter, equal(impl->text().data(), textRange, text2));
                     break;
                 case 2:
                     REPORTER_ASSERT(reporter, style.equals(text_style3));
-                    REPORTER_ASSERT(reporter, equal(impl->text().begin(), textRange, text3));
+                    REPORTER_ASSERT(reporter, equal(impl->text().data(), textRange, text3));
                     break;
                 case 3:
                     REPORTER_ASSERT(reporter, style.equals(text_style4));
-                    REPORTER_ASSERT(reporter, equal(impl->text().begin(), textRange, text41));
+                    REPORTER_ASSERT(reporter, equal(impl->text().data(), textRange, text41));
                     break;
                 default:
                     REPORTER_ASSERT(reporter, false);
@@ -1301,7 +1302,7 @@ UNIX_ONLY_TEST(SkParagraph_RainbowParagraph, reporter) {
         switch (index) {
             case 4:
                 REPORTER_ASSERT(reporter, style.equals(text_style4));
-                REPORTER_ASSERT(reporter, equal(impl->text().begin(), textRange, text42));
+                REPORTER_ASSERT(reporter, equal(impl->text().data(), textRange, text42));
                 break;
             default:
                 REPORTER_ASSERT(reporter, false);
@@ -1346,7 +1347,7 @@ UNIX_ONLY_TEST(SkParagraph_DefaultStyleParagraph, reporter) {
             StyleType::kAllAttributes,
             [&](TextRange textRange, const TextStyle& style, const TextLine::ClipContext& context) {
                 REPORTER_ASSERT(reporter, style.equals(paragraph_style.getTextStyle()));
-                REPORTER_ASSERT(reporter, equal(impl->text().begin(), textRange, text));
+                REPORTER_ASSERT(reporter, equal(impl->text().data(), textRange, text));
                 ++index;
                 return true;
             });
@@ -1392,7 +1393,7 @@ UNIX_ONLY_TEST(SkParagraph_BoldParagraph, reporter) {
             StyleType::kAllAttributes,
             [&](TextRange textRange, const TextStyle& style, const TextLine::ClipContext& context) {
                 REPORTER_ASSERT(reporter, style.equals(text_style));
-                REPORTER_ASSERT(reporter, equal(impl->text().begin(), textRange, text));
+                REPORTER_ASSERT(reporter, equal(impl->text().data(), textRange, text));
                 ++index;
                 return true;
             });
@@ -4274,8 +4275,9 @@ UNIX_ONLY_TEST(SkParagraph_EmojiParagraph, reporter) {
     auto impl = static_cast<ParagraphImpl*>(paragraph.get());
 
     REPORTER_ASSERT(reporter, impl->lines().size() == 8);
+
     for (auto& line : impl->lines()) {
-        if (&line != impl->lines().end() - 1) {
+        if (&line != impl->lines().data() + impl->lines().size() - 1) {
             // The actual value is 50_size / 109_ppemX * 136_advance = ~62.385319
             // FreeType reports advances in 24.6 fixed point, so each is 62.390625
             REPORTER_ASSERT(reporter,
@@ -5432,7 +5434,7 @@ DEF_TEST_DISABLED(SkParagraph_JSON2, reporter) {
     auto cluster = 0;
     for (auto& run : impl->runs()) {
         SkShaperJSONWriter::VisualizeClusters(
-                impl->text().begin() + run.textRange().start, 0, run.textRange().width(),
+                impl->text().data() + run.textRange().start, 0, run.textRange().width(),
                 run.glyphs(), run.clusterIndexes(),
                 [&](int codePointCount, SkSpan<const char> utf1to1,
                     SkSpan<const SkGlyphID> glyph1to1) {
@@ -6054,7 +6056,7 @@ UNIX_ONLY_TEST(SkParagraph_MemoryLeak, reporter) {
 		//used to add a delay so I can monitor memory usage
 		//std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 	}
-};
+}
 
 UNIX_ONLY_TEST(SkParagraph_FormattingInfinity, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
@@ -6090,7 +6092,7 @@ UNIX_ONLY_TEST(SkParagraph_FormattingInfinity, reporter) {
     draw("center", TextAlign::kCenter, TextDirection::kLtr);
     draw("justify LTR", TextAlign::kJustify, TextDirection::kLtr);
     draw("justify RTL", TextAlign::kJustify, TextDirection::kRtl);
-};
+}
 
 UNIX_ONLY_TEST(SkParagraph_Infinity, reporter) {
     SkASSERT(nearlyEqual(1, SK_ScalarInfinity) == false);
@@ -6108,7 +6110,7 @@ UNIX_ONLY_TEST(SkParagraph_Infinity, reporter) {
     SkASSERT(nearlyEqual(SK_ScalarNaN, SK_ScalarInfinity) == false);
     SkASSERT(nearlyEqual(SK_ScalarNaN, SK_ScalarNegativeInfinity) == false);
     SkASSERT(nearlyEqual(SK_ScalarNaN, SK_ScalarNaN) == false);
-};
+}
 
 UNIX_ONLY_TEST(SkParagraph_LineMetrics, reporter) {
 
@@ -6188,7 +6190,7 @@ UNIX_ONLY_TEST(SkParagraph_LineMetrics, reporter) {
         auto y = metric.fBaseline;
         canvas.get()->drawLine(x0, y, x1, y, green);
     }
-};
+}
 
 DEF_TEST_DISABLED(SkParagraph_PlaceholderHeightInf, reporter) {
     TestCanvas canvas("SkParagraph_PlaceholderHeightInf.png");
@@ -7747,7 +7749,7 @@ UNIX_ONLY_TEST(SkParagraph_MultiStyle_FFI, reporter) {
     REPORTER_ASSERT(reporter, fi[0].direction == TextDirection::kLtr);
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(fi[0].rect.fLeft, 34.139999f, EPSILON100));
     REPORTER_ASSERT(reporter, SkScalarNearlyEqual(fi[0].rect.fRight, 51.209999f, EPSILON100));
-};
+}
 
 // Multiple code points/single glyph emoji family should be treated as a single glyph
 UNIX_ONLY_TEST(SkParagraph_MultiStyle_EmojiFamily, reporter) {
@@ -7801,7 +7803,7 @@ UNIX_ONLY_TEST(SkParagraph_MultiStyle_EmojiFamily, reporter) {
 
     auto f4 = paragraph->getRectsForRange(8, 10, RectHeightStyle::kTight, RectWidthStyle::kTight);
     REPORTER_ASSERT(reporter, f4.size() == 0);
-};
+}
 
 // Arabic Ligature case should be painted into multi styles but queried as a single glyph
 UNIX_ONLY_TEST(SkParagraph_MultiStyle_Arabic, reporter) {
@@ -7853,7 +7855,7 @@ UNIX_ONLY_TEST(SkParagraph_MultiStyle_Arabic, reporter) {
 
     auto fi = paragraph->getRectsForRange(2, 3, RectHeightStyle::kTight, RectWidthStyle::kTight);
     REPORTER_ASSERT(reporter, fi.size() == 0);
-};
+}
 
 // Zalgo text should be painted into multi styles but queried as a single glyph
 UNIX_ONLY_TEST(SkParagraph_MultiStyle_Zalgo, reporter) {
@@ -7916,7 +7918,7 @@ UNIX_ONLY_TEST(SkParagraph_MultiStyle_Zalgo, reporter) {
     auto posP = paragraph->getGlyphPositionAtCoordinate(resKP.back().rect.fRight, height/2);
     auto posH = paragraph->getGlyphPositionAtCoordinate(resPh.back().rect.fRight, height/2);
     REPORTER_ASSERT(reporter, posK.position == 148 && posP.position == 264 && posH.position == 572);
-};
+}
 
 // RTL Ellipsis
 UNIX_ONLY_TEST(SkParagraph_RtlEllipsis1, reporter) {
@@ -7954,7 +7956,7 @@ UNIX_ONLY_TEST(SkParagraph_RtlEllipsis1, reporter) {
             first = false;
             return true;
         });
-};
+}
 
 UNIX_ONLY_TEST(SkParagraph_RtlEllipsis2, reporter) {
     sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
@@ -7991,7 +7993,7 @@ UNIX_ONLY_TEST(SkParagraph_RtlEllipsis2, reporter) {
             first = false;
             return true;
         });
-};
+}
 
 static bool has_empty_typeface(SkFont f) {
     SkTypeface* face = f.getTypeface();
@@ -8468,6 +8470,503 @@ UNIX_ONLY_TEST(SkParagraph_ICU4X_EmojiFontResolution, reporter) {
     test("🏴󠁧󠁢󠁥󠁮󠁧󠁿", 127988); // Tag sequence
     test("👋🏼", 128075); // Modifier sequence
     test("👨‍👩‍👧‍👦", 128104); // ZWJ sequence
+}
+
+// Checked: disabled for TxtLib
+UNIX_ONLY_TEST(SkParagraph_ArabicNoLetterSpacing, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+    TestCanvas canvas("SkParagraph_NoSpacesArabicParagraph.png");
+    const char* arabic = "سلام";
+    const char* english = "Hello";
+
+    ParagraphStyle paragraph_style;
+    TextStyle text_style;
+    text_style.setFontSize(10);
+    text_style.setColor(SK_ColorBLACK);
+
+    auto layout = [&](const char* familyName, const char* text, double letterSpacing) -> double {
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+        text_style.setLetterSpacing(letterSpacing);
+        text_style.setFontFamilies({SkString(familyName)});
+        builder.pushStyle(text_style);
+        builder.addText(text, strlen(text));
+        builder.pop();
+
+        auto paragraph = builder.Build();
+        paragraph->layout(TestCanvasWidth);
+        paragraph->paint(canvas.get(), 20, 0);
+        canvas.get()->translate(0, paragraph->getHeight() + 20);
+        return paragraph->getLongestLine();
+    };
+
+    {   // Letter spacing does not affect the layout for Arabic
+        auto noLetterSpacing = layout("Katibeh", arabic, 0.0);
+        auto withLetterSpacing = layout("Katibeh", arabic, 100.0);
+        REPORTER_ASSERT(reporter, SkScalarNearlyEqual(noLetterSpacing, withLetterSpacing, EPSILON1000));
+    }
+    {
+        // Letter spacing affects English text (number of letter * letter spacing)
+        auto noLetterSpacing = layout("Roboto", english, 0.0);
+        auto withLetterSpacing = layout("Roboto", english, 100.0);
+        REPORTER_ASSERT(reporter, SkScalarNearlyEqual((withLetterSpacing - noLetterSpacing), 100.0 * strlen(english), EPSILON1000));
+    }
+}
+
+UNIX_ONLY_TEST(SkParagraph_ArabicWithLetterSpacingWhitespacesAsChrome, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+    TestCanvas canvas("SkParagraph_SpacedArabicParagraph.png");
+    const char* arabic = "سلام";
+    const char* spaced = "س لا م";
+    ParagraphStyle paragraph_style;
+    TextStyle text_style;
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+
+    auto layout = [&](const char* familyName, const char* text, double letterSpacing) -> double {
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+        text_style.setLetterSpacing(letterSpacing);
+        text_style.setFontFamilies({SkString(familyName)});
+        builder.pushStyle(text_style);
+        builder.addText(text, strlen(text));
+        builder.pop();
+
+        auto paragraph = builder.Build();
+        paragraph->layout(TestCanvasWidth);
+        paragraph->paint(canvas.get(), 20, 0);
+        canvas.get()->translate(0, paragraph->getHeight() + 20);
+        return paragraph->getLongestLine();
+    };
+    {   // Letter spacing does not show for Arabic without whitespaces
+        auto noLetterSpacing = layout("Katibeh", arabic, 0.0);
+        auto withLetterSpacing = layout("Katibeh", arabic, 10.0);
+        REPORTER_ASSERT(reporter, SkScalarNearlyEqual(withLetterSpacing, noLetterSpacing, EPSILON100));
+    }
+    {   // Letter spacing shows for Arabic on whitespaces
+        auto noLetterSpacing = layout("Katibeh", spaced, 0.0);
+        auto withLetterSpacing = layout("Katibeh", spaced, 10.0);
+        REPORTER_ASSERT(reporter, SkScalarNearlyEqual(withLetterSpacing, noLetterSpacing, EPSILON100));
+    }
+}
+
+UNIX_ONLY_TEST(SkParagraph_ArabicWithLetterSpacingWhitespacesAsCSS, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>();
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+    TestCanvas canvas("SkParagraph_SpacedArabicParagraph.png");
+    const char* arabic = "سلام";
+    const char* spaced = "س لا م";
+    ParagraphStyle paragraph_style;
+    paragraph_style.setLetterSpacingByCSSSpec(true);
+    TextStyle text_style;
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+
+    auto layout = [&](const char* familyName, const char* text, double letterSpacing) -> double {
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+        text_style.setLetterSpacing(letterSpacing);
+        text_style.setFontFamilies({SkString(familyName)});
+        builder.pushStyle(text_style);
+        builder.addText(text, strlen(text));
+        builder.pop();
+
+        auto paragraph = builder.Build();
+        paragraph->layout(TestCanvasWidth);
+        paragraph->paint(canvas.get(), 20, 0);
+        canvas.get()->translate(0, paragraph->getHeight() + 20);
+        return paragraph->getLongestLine();
+    };
+    {   // Letter spacing does not show for Arabic without whitespaces
+        auto noLetterSpacing = layout("Katibeh", arabic, 0.0);
+        auto withLetterSpacing = layout("Katibeh", arabic, 10.0);
+        REPORTER_ASSERT(reporter, SkScalarNearlyEqual(withLetterSpacing, noLetterSpacing, EPSILON100));
+    }
+    {   // Letter spacing shows for Arabic on whitespaces
+        auto noLetterSpacing = layout("Katibeh", spaced, 0.0);
+        auto withLetterSpacing = layout("Katibeh", spaced, 10.0);
+        REPORTER_ASSERT(reporter, SkScalarNearlyEqual(withLetterSpacing, noLetterSpacing + 20.0, EPSILON100));
+    }
+}
+
+// Soft hyphen (U+00AD) tests
+// When a line breaks at a soft hyphen position, a visible hyphen should be rendered.
+// When NOT at a line break, soft hyphens should remain invisible (zero-width).
+
+UNIX_ONLY_TEST(SkParagraph_SoftHyphenAtLineBreak, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+
+    // "inter\u00ADnational" — soft hyphen between "inter" and "national"
+    // With a narrow width, it should break at the soft hyphen and render a visible hyphen
+    const char* text =
+            "inter\xC2\xAD"
+            "national";
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.turnHintingOff();
+    paragraph_style.setRenderSoftHyphens(true);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto")});
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText(text, strlen(text));
+    builder.pop();
+
+    auto paragraph = builder.Build();
+    // Narrow width forces a break at the soft hyphen. We don't assert on the
+    // exact line count because glyph advances vary across font versions; we
+    // verify the feature works by checking the hyphen run's structural state.
+    paragraph->layout(80);
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+    REPORTER_ASSERT(reporter, !impl->lines().empty());
+
+    // Structural check: the first line should have a hyphen run attached.
+    // This is the feature's output regardless of how many total lines the
+    // text breaks into, which depends on font metrics.
+    auto& firstLine = impl->lines()[0];
+    REPORTER_ASSERT(reporter, firstLine.hyphen() != nullptr);
+    if (firstLine.hyphen() == nullptr) return;
+    // The hyphen run should have positive advance width
+    REPORTER_ASSERT(reporter, firstLine.hyphen()->advance().fX > 0);
+    // The line's total width should include the hyphen
+    REPORTER_ASSERT(reporter, firstLine.width() > firstLine.widthWithoutEllipsis());
+}
+
+UNIX_ONLY_TEST(SkParagraph_SoftHyphenNoBreak, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+
+    // Same text but with enough width to fit on one line — no hyphen should render
+    const char* text =
+            "inter\xC2\xAD"
+            "national";
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.turnHintingOff();
+    paragraph_style.setRenderSoftHyphens(true);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto")});
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText(text, strlen(text));
+    builder.pop();
+
+    auto paragraph = builder.Build();
+    paragraph->layout(TestCanvasWidth);  // Wide enough for one line
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+    REPORTER_ASSERT(reporter, impl->lines().size() == 1);
+
+    // No hyphen should be rendered when soft hyphen is not at a line break
+    auto& firstLine = impl->lines()[0];
+    REPORTER_ASSERT(reporter, firstLine.hyphen() == nullptr);
+}
+
+UNIX_ONLY_TEST(SkParagraph_MultipleSoftHyphens, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+
+    // "su\u00ADper\u00ADcali\u00ADfrag" — multiple soft hyphens
+    // Only the one at the actual line break should render
+    const char* text =
+            "su\xC2\xAD"
+            "per\xC2\xAD"
+            "cali\xC2\xAD"
+            "frag";
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.turnHintingOff();
+    paragraph_style.setRenderSoftHyphens(true);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto")});
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText(text, strlen(text));
+    builder.pop();
+
+    auto paragraph = builder.Build();
+    // Narrow width forces a break at one of the soft hyphens.
+    paragraph->layout(80);
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+    REPORTER_ASSERT(reporter, !impl->lines().empty());
+
+    // The first line should have a hyphen (it breaks at a soft hyphen).
+    auto& firstLine = impl->lines()[0];
+    REPORTER_ASSERT(reporter, firstLine.hyphen() != nullptr);
+    if (firstLine.hyphen() == nullptr) return;
+    REPORTER_ASSERT(reporter, firstLine.hyphen()->advance().fX > 0);
+}
+
+UNIX_ONLY_TEST(SkParagraph_SoftHyphenLineWidth, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+
+    const char* text =
+            "inter\xC2\xAD"
+            "national";
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.turnHintingOff();
+    paragraph_style.setRenderSoftHyphens(true);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto")});
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText(text, strlen(text));
+    builder.pop();
+
+    auto paragraph = builder.Build();
+    paragraph->layout(80);
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+    REPORTER_ASSERT(reporter, !impl->lines().empty());
+
+    auto& firstLine = impl->lines()[0];
+    REPORTER_ASSERT(reporter, firstLine.hyphen() != nullptr);
+    if (firstLine.hyphen() == nullptr) return;
+
+    // Line width should equal text width + hyphen width
+    SkScalar textWidth = firstLine.widthWithoutEllipsis();
+    SkScalar hyphenWidth = firstLine.hyphen()->advance().fX;
+    REPORTER_ASSERT(reporter,
+                    SkScalarNearlyEqual(firstLine.width(), textWidth + hyphenWidth, EPSILON100));
+}
+
+UNIX_ONLY_TEST(SkParagraph_SoftHyphenRTL, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+
+    // Arabic text with soft hyphens: "كلمة\u00ADطويلة" (kalima-tawila = "long word")
+    const char* text =
+            "\xD9\x83\xD9\x84\xD9\x85\xD8\xA9"           // كلمة
+            "\xC2\xAD"                                   // soft hyphen
+            "\xD8\xB7\xD9\x88\xD9\x8A\xD9\x84\xD8\xA9";  // طويلة
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.turnHintingOff();
+    paragraph_style.setRenderSoftHyphens(true);
+    paragraph_style.setTextDirection(TextDirection::kRtl);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Noto Naskh Arabic")});
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText(text, strlen(text));
+    builder.pop();
+
+    auto paragraph = builder.Build();
+    // Arabic glyphs are wider per character; narrow width forces a break.
+    paragraph->layout(40);
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+    REPORTER_ASSERT(reporter, !impl->lines().empty());
+
+    auto& firstLine = impl->lines()[0];
+    REPORTER_ASSERT(reporter, firstLine.hyphen() != nullptr);
+    if (firstLine.hyphen() == nullptr) return;
+    REPORTER_ASSERT(reporter, firstLine.hyphen()->advance().fX > 0);
+    // Line width should include the hyphen
+    REPORTER_ASSERT(reporter, firstLine.width() > firstLine.widthWithoutEllipsis());
+}
+
+// Verify that with the default (setRenderSoftHyphens(false)), no visible hyphen
+// is rendered even when the line break occurs at a soft hyphen position.
+UNIX_ONLY_TEST(SkParagraph_SoftHyphenDefaultOff, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+
+    const char* text =
+            "inter\xC2\xAD"
+            "national";
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.turnHintingOff();
+    // Intentionally do NOT call setRenderSoftHyphens — default must be false.
+    REPORTER_ASSERT(reporter, !paragraph_style.getRenderSoftHyphens());
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto")});
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText(text, strlen(text));
+    builder.pop();
+
+    auto paragraph = builder.Build();
+    paragraph->layout(80);
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+    REPORTER_ASSERT(reporter, !impl->lines().empty());
+
+    // No hyphen run should be created on any line when rendering is disabled.
+    for (const auto& line : impl->lines()) {
+        REPORTER_ASSERT(reporter, line.hyphen() == nullptr);
+    }
+    auto& firstLine = impl->lines()[0];
+    REPORTER_ASSERT(reporter, firstLine.width() == firstLine.widthWithoutEllipsis());
+}
+
+// Verifies that the rendered soft hyphen does not produce a spurious selection
+// rect: getRectsForRange over the entire source text must not include the hyphen's
+// pixel area, since the hyphen is not part of the source text.
+UNIX_ONLY_TEST(SkParagraph_SoftHyphenGetRectsForRange, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+
+    const char* text =
+            "inter\xC2\xAD"
+            "national";
+    const size_t textLen = strlen(text);
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.turnHintingOff();
+    paragraph_style.setRenderSoftHyphens(true);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto")});
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText(text, textLen);
+    builder.pop();
+
+    auto paragraph = builder.Build();
+    // Narrow width forces a break at the soft hyphen. Verify via structural
+    // checks (hyphen run on first line) rather than exact line counts, since
+    // those depend on font metrics that vary across platforms.
+    paragraph->layout(80);
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+    REPORTER_ASSERT(reporter, !impl->lines().empty());
+
+    auto& firstLine = impl->lines()[0];
+    REPORTER_ASSERT(reporter, firstLine.hyphen() != nullptr);
+    if (firstLine.hyphen() == nullptr) return;
+    SkScalar textOnlyWidth = firstLine.widthWithoutEllipsis();
+    SkScalar lineWidth = firstLine.width();
+    REPORTER_ASSERT(reporter, lineWidth > textOnlyWidth);  // hyphen contributes width
+
+    // Request rects for the entire source text. None of the returned rects on the
+    // first line should extend past the bare-text advance into the hyphen pixels.
+    auto boxes = paragraph->getRectsForRange(
+            0, textLen, RectHeightStyle::kTight, RectWidthStyle::kTight);
+    REPORTER_ASSERT(reporter, !boxes.empty());
+
+    SkScalar firstLineMaxRight = 0;
+    SkScalar firstLineY = firstLine.offset().fY + firstLine.height() / 2;
+    for (const auto& box : boxes) {
+        if (box.rect.fTop <= firstLineY && box.rect.fBottom >= firstLineY) {
+            firstLineMaxRight = std::max(firstLineMaxRight, box.rect.fRight);
+        }
+    }
+    // The right edge of any rect on the first line must not exceed the bare-text
+    // advance (with a small epsilon). If the hyphen were producing a spurious rect,
+    // this would equal firstLine.width(), not widthWithoutEllipsis().
+    SkScalar firstLineLeft = firstLine.offset().fX;
+    REPORTER_ASSERT(reporter, firstLineMaxRight <= firstLineLeft + textOnlyWidth + EPSILON100);
+}
+
+// Verifies that clicking inside the rendered hyphen's pixel region maps to the
+// source text offset at the end of the line (i.e. just after the soft hyphen),
+// not into the synthetic hyphen run itself.
+UNIX_ONLY_TEST(SkParagraph_SoftHyphenGlyphPositionAtCoordinate, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+
+    const char* text =
+            "inter\xC2\xAD"
+            "national";
+
+    ParagraphStyle paragraph_style;
+    paragraph_style.turnHintingOff();
+    paragraph_style.setRenderSoftHyphens(true);
+    ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+
+    TextStyle text_style;
+    text_style.setFontFamilies({SkString("Roboto")});
+    text_style.setFontSize(20);
+    text_style.setColor(SK_ColorBLACK);
+    builder.pushStyle(text_style);
+    builder.addText(text, strlen(text));
+    builder.pop();
+
+    auto paragraph = builder.Build();
+    paragraph->layout(80);
+
+    auto impl = static_cast<ParagraphImpl*>(paragraph.get());
+    REPORTER_ASSERT(reporter, !impl->lines().empty());
+    auto& firstLine = impl->lines()[0];
+    REPORTER_ASSERT(reporter, firstLine.hyphen() != nullptr);
+    if (firstLine.hyphen() == nullptr) return;
+
+    SkScalar lineY = firstLine.offset().fY + firstLine.height() / 2;
+    SkScalar textRight = firstLine.offset().fX + firstLine.widthWithoutEllipsis();
+    SkScalar lineRight = firstLine.offset().fX + firstLine.width();
+
+    // Click inside the rendered hyphen pixel region (between text end and line end).
+    auto inHyphen = paragraph->getGlyphPositionAtCoordinate((textRight + lineRight) / 2, lineY);
+    // The position should land at the end of the first line's source text -- i.e.
+    // somewhere within the soft-hyphen cluster. It must NOT be greater than the
+    // start of the second line's "national" text (position 7 = after "inter\xC2\xAD").
+    REPORTER_ASSERT(reporter, inHyphen.position <= 7);
+    REPORTER_ASSERT(reporter, inHyphen.position >= 5);
+}
+
+// Verifies that getWordBoundary is unaffected by soft hyphen rendering: word
+// boundaries are computed from source text only.
+UNIX_ONLY_TEST(SkParagraph_SoftHyphenWordBoundary, reporter) {
+    sk_sp<ResourceFontCollection> fontCollection = sk_make_sp<ResourceFontCollection>(true);
+    SKIP_IF_FONTS_NOT_FOUND(reporter, fontCollection)
+
+    const char* text =
+            "inter\xC2\xAD"
+            "national";
+
+    auto buildParagraph = [&](bool renderHyphens) {
+        ParagraphStyle paragraph_style;
+        paragraph_style.turnHintingOff();
+        paragraph_style.setRenderSoftHyphens(renderHyphens);
+        ParagraphBuilderImpl builder(paragraph_style, fontCollection, get_unicode());
+
+        TextStyle text_style;
+        text_style.setFontFamilies({SkString("Roboto")});
+        text_style.setFontSize(20);
+        text_style.setColor(SK_ColorBLACK);
+        builder.pushStyle(text_style);
+        builder.addText(text, strlen(text));
+        builder.pop();
+        auto paragraph = builder.Build();
+        paragraph->layout(80);
+        return paragraph;
+    };
+
+    auto withHyphen = buildParagraph(true);
+    auto withoutHyphen = buildParagraph(false);
+
+    // Word boundaries must be identical regardless of soft hyphen rendering.
+    for (unsigned i = 0; i < strlen(text); ++i) {
+        auto a = withHyphen->getWordBoundary(i);
+        auto b = withoutHyphen->getWordBoundary(i);
+        REPORTER_ASSERT(reporter, a == b);
+    }
 }
 
 #if defined(SK_UNICODE_ICU_IMPLEMENTATION)

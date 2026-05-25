@@ -18,10 +18,10 @@
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkDeque.h"
-#include "src/base/SkTLazy.h"
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 // Because a single save/restore state can have multiple clips, this class
@@ -85,9 +85,7 @@ public:
             this->initPath(0, path, m, op, doAA);
         }
 
-        Element(sk_sp<SkShader> shader) {
-            this->initShader(0, std::move(shader));
-        }
+        explicit Element(sk_sp<SkShader> shader) { this->initShader(0, std::move(shader)); }
 
         Element(const SkRect& rect, bool doAA) {
             this->initReplaceRect(0, rect, doAA);
@@ -189,7 +187,7 @@ public:
     private:
         friend class SkClipStack;
 
-        SkTLazy<SkPath> fDeviceSpacePath;
+        std::optional<SkPath> fDeviceSpacePath;
         SkRRect fDeviceSpaceRRect;
         sk_sp<SkShader> fShader;
         int fSaveCount;  // save count of stack when this element was added.
@@ -216,7 +214,7 @@ public:
         bool fIsIntersectionOfRects;
 
         uint32_t fGenID;
-        Element(int saveCount) {
+        explicit Element(int saveCount) {
             this->initCommon(saveCount, SkClipOp::kIntersect, false);
             this->setEmpty();
         }

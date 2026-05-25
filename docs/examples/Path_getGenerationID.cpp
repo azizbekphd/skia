@@ -1,15 +1,15 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_getGenerationID, 256, 256, true, 0) {
 void draw(SkCanvas* canvas) {
     SkPath path;
     SkDebugf("empty genID = %u\n", path.getGenerationID());
-    path.lineTo(1, 2);
+    path = SkPathBuilder().lineTo(1, 2).detach();
     SkDebugf("1st lineTo genID = %u\n", path.getGenerationID());
-    path.rewind();
+    path.reset();
     SkDebugf("empty genID = %u\n", path.getGenerationID());
-    path.lineTo(1, 2);
+    path = SkPathBuilder().lineTo(1, 2).detach();
     SkDebugf("2nd lineTo genID = %u\n", path.getGenerationID());
 }
 }  // END FIDDLE

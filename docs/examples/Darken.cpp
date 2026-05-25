@@ -1,14 +1,13 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Darken, 256, 256, false, 3) {
 void draw(SkCanvas* canvas) {
     canvas->drawImage(image, 0, 0);
-    SkColor colors[] = { SK_ColorWHITE, SK_ColorBLACK };
+    SkColor4f colors[] = { SkColors::kWhite, SkColors::kBlack };
     SkPoint horz[] = { { 0, 0 }, { 256, 0 } };
     SkPaint paint;
-    paint.setShader(SkGradientShader::MakeLinear(horz, colors, nullptr, std::size(colors),
-            SkTileMode::kClamp));
+    paint.setShader(SkShaders::LinearGradient(horz, {{colors, {}, SkTileMode::kClamp}, {}}));
     paint.setBlendMode(SkBlendMode::kDarken);
     canvas->drawPaint(paint);
 }

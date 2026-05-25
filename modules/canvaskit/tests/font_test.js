@@ -51,11 +51,11 @@ describe('Font Behavior', () => {
         fontPaint.setAntiAlias(true);
         fontPaint.setStyle(CanvasKit.PaintStyle.Fill);
 
-
-        const arc = new CanvasKit.Path();
-        arc.arcToOval(CanvasKit.LTRBRect(20, 40, 280, 300), -160, 140, true);
-        arc.lineTo(210, 140);
-        arc.arcToOval(CanvasKit.LTRBRect(20, 0, 280, 260), 160, -140, true);
+        const arc = new CanvasKit.PathBuilder()
+            .arcToOval(CanvasKit.LTRBRect(20, 40, 280, 300), -160, 140, true)
+            .lineTo(210, 140)
+            .arcToOval(CanvasKit.LTRBRect(20, 0, 280, 260), 160, -140, true)
+            .detachAndDelete();
 
         // Only 1 dot should show up in the image, because we run out of path.
         const str = 'This téxt should follow the curve across contours...';
@@ -83,10 +83,11 @@ describe('Font Behavior', () => {
         fontPaint.setAntiAlias(true);
         fontPaint.setStyle(CanvasKit.PaintStyle.Fill);
 
-        const arc = new CanvasKit.Path();
-        arc.arcToOval(CanvasKit.LTRBRect(20, 40, 280, 300), -160, 140, true);
-        arc.lineTo(210, 140);
-        arc.arcToOval(CanvasKit.LTRBRect(20, 0, 280, 260), 160, -140, true);
+        const arc = new CanvasKit.PathBuilder()
+            .arcToOval(CanvasKit.LTRBRect(20, 40, 280, 300), -160, 140, true)
+            .lineTo(210, 140)
+            .arcToOval(CanvasKit.LTRBRect(20, 0, 280, 260), 160, -140, true)
+            .detachAndDelete();
 
         const str = 'This téxt should follow the curve across contours...';
         const textBlob = CanvasKit.TextBlob.MakeOnPath(str, arc, font, 60.5);
@@ -301,6 +302,60 @@ describe('Font Behavior', () => {
             const ids = font.getGlyphIDs('M');
             const widths = font.getGlyphWidths(ids);
             expect(widths[0]).toBeCloseTo(expectedSizes[idx], 5);
+            font.delete();
+        }
+
+        typeface.delete();
+    });
+
+    it('can get font metrics', () => {
+        const typeface = CanvasKit.Typeface.MakeTypefaceFromData(notoSerifFontBuffer);
+        const fontSizes = [257, 100, 11];
+        // The point of these values is to let us know 1) if font metrics is working
+        // and 2) that measurements don't drastically change. If these change a little bit,
+        // just update them with the new values. For super-accurate readings, one could
+        // run a C++ snippet of code and compare the values, but that is likely unnecessary
+        // unless we suspect a bug with the bindings.
+        const expectedFm = [{
+            ascent: -274.69384765625,
+            descent: 75.29296875,
+            leading: 0,
+            underlineThickness: 12.7998046875,
+            underlinePosition: 19.3251953125,
+            strikeoutThickness: 12.7998046875,
+            strikeoutPosition: -62.4931640625,
+        },{
+            ascent: -106.884765625,
+            descent: 29.296875,
+            leading: 0,
+            underlineThickness: 4.98046875,
+            underlinePosition: 7.51953125,
+            strikeoutThickness: 4.98046875,
+            strikeoutPosition: -24.31640625,
+        },{
+            ascent: -11.75732421875,
+            descent: 3.22265625,
+            leading: 0,
+            underlineThickness: 0.5478515625,
+            underlinePosition: 0.8271484375,
+            strikeoutThickness: 0.5478515625,
+            strikeoutPosition: -2.6748046875,
+        }];
+
+        for (const idx in fontSizes) {
+            const font = new CanvasKit.Font(typeface, fontSizes[idx]);
+            font.setHinting(CanvasKit.FontHinting.None);
+            font.setLinearMetrics(true);
+            font.setSubpixel(true);
+
+            const fm = font.getMetrics();
+            expect(fm.ascent).toBeCloseTo(expectedFm[idx].ascent, 3);
+            expect(fm.descent).toBeCloseTo(expectedFm[idx].descent, 3);
+            expect(fm.leading).toBeCloseTo(expectedFm[idx].leading, 3);
+            expect(fm.underlineThickness).toBeCloseTo(expectedFm[idx].underlineThickness, 3);
+            expect(fm.underlinePosition).toBeCloseTo(expectedFm[idx].underlinePosition, 3);
+            expect(fm.strikeoutThickness).toBeCloseTo(expectedFm[idx].strikeoutThickness, 3);
+            expect(fm.strikeoutPosition).toBeCloseTo(expectedFm[idx].strikeoutPosition, 3);
             font.delete();
         }
 

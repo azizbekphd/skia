@@ -16,9 +16,12 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
+#include "tools/gpu/vk/VkYcbcrSamplerHelper.h"
+
+#if defined(SK_GANESH)
 #include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/SkImageGanesh.h"
-#include "tools/gpu/vk/VkYcbcrSamplerHelper.h"
+#endif
 
 #if defined(SK_GRAPHITE)
 #include "include/gpu/graphite/Image.h"
@@ -88,8 +91,7 @@ protected:
 
         fYCbCrImage = SkImages::WrapTexture(recorder,
                                             ycbcrHelper->backendTexture(),
-                                            kRGB_888x_SkColorType,
-                                            kPremul_SkAlphaType,
+                                            kUnknown_SkAlphaType, // force alpha channel to 1
                                             /*colorSpace=*/nullptr,
                                             release_ycbcrhelper,
                                             ycbcrHelper.get());
@@ -103,6 +105,7 @@ protected:
     }
 #endif // SK_GRAPHITE
 
+#if defined(SK_GANESH)
     DrawResult createYCbCrImage(GrDirectContext* dContext, SkString* errorMsg) {
         std::unique_ptr<VkYcbcrSamplerHelper> ycbcrHelper(new VkYcbcrSamplerHelper(dContext));
 
@@ -133,6 +136,7 @@ protected:
 
         return DrawResult::kOk;
     }
+#endif
 
     DrawResult onGpuSetup(SkCanvas* canvas,
                           SkString* errorMsg,
@@ -147,12 +151,11 @@ protected:
             }
 
             return this->createYCbCrImage(recorder, errorMsg);
-        } else
+        }
 #endif
-        {
-            GrDirectContext* dContext = GrAsDirectContext(canvas->recordingContext());
-
-            if (!dContext || dContext->abandoned()) {
+#if defined(SK_GANESH)
+        if (GrDirectContext* dContext = GrAsDirectContext(canvas->recordingContext())) {
+            if (dContext->abandoned()) {
                 return DrawResult::kSkip;
             }
 
@@ -168,6 +171,8 @@ protected:
 
             return DrawResult::kOk;
         }
+#endif
+        return DrawResult::kSkip;
     }
 
     void onGpuTeardown() override {
@@ -186,7 +191,7 @@ private:
 
     sk_sp<SkImage> fYCbCrImage;
 
-    using INHERITED = GpuGM;
+    using INHERITED = GM;
 };
 
 //////////////////////////////////////////////////////////////////////////////

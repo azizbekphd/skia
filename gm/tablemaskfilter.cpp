@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Google LLC.
+ * Copyright 2025 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -11,6 +11,7 @@
 #include "include/core/SkMaskFilter.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPathBuilder.h"
 #include "include/core/SkSurface.h"
 #include "include/effects/SkTableMaskFilter.h"
 
@@ -28,9 +29,10 @@ DEF_SIMPLE_GM(tablemaskfilter, canvas, 400, 400) {
     table[255] = 255;
     paint.setMaskFilter(sk_sp<SkMaskFilter>(SkTableMaskFilter::Create(table)));
 
-    SkPath path;
-    path.addRect({38.f, 38.f, 218.f, 218.f});
-    path.addOval({38.f, 38.f, 218.f, 218.f}, SkPathDirection::kCCW);
+    SkPath path = SkPathBuilder()
+                  .addRect({38.f, 38.f, 218.f, 218.f})
+                  .addOval({38.f, 38.f, 218.f, 218.f}, SkPathDirection::kCCW)
+                  .detach();
 
     canvas->drawPath(path, paint);
 }

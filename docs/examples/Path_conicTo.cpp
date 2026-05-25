@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_conicTo, 256, 160, false, 0) {
@@ -13,9 +13,10 @@ void draw(SkCanvas* canvas) {
     paint.setStrokeWidth(3);
     SkScalar weight = 0.5f;
     for (unsigned i = 0; i < std::size(colors); ++i) {
-        SkPath path;
-        path.moveTo(conicPts[0]);
-        path.conicTo(conicPts[1], conicPts[2], weight);
+        SkPath path = SkPathBuilder()
+                      .moveTo(conicPts[0])
+                      .conicTo(conicPts[1], conicPts[2], weight)
+                      .detach();
         paint.setColor(colors[i]);
         canvas->drawPath(path, paint);
         weight += 0.25f;

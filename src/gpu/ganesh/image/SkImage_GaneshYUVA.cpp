@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google Inc.
+ * Copyright 2018 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -185,7 +185,8 @@ sk_sp<SkImage> SkImage_GaneshYUVA::onReinterpretColorSpace(sk_sp<SkColorSpace> n
 
 std::tuple<GrSurfaceProxyView, GrColorType> SkImage_GaneshYUVA::asView(GrRecordingContext* rContext,
                                                                        skgpu::Mipmapped mipmapped,
-                                                                       GrImageTexGenPolicy) const {
+                                                                       GrImageTexGenPolicy,
+                                                                       GrRenderTargetProxy*) const {
     if (!fContext->priv().matches(rContext)) {
         return {};
     }

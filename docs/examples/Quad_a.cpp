@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Quad_a, 256, 110, false, 0) {
@@ -9,9 +9,10 @@ void draw(SkCanvas* canvas) {
     SkPoint quadPts[] = {{20, 90}, {120, 10}, {220, 90}};
     canvas->drawLine(quadPts[0], quadPts[1], paint);
     canvas->drawLine(quadPts[1], quadPts[2], paint);
-    SkPath path;
-    path.moveTo(quadPts[0]);
-    path.quadTo(quadPts[1], quadPts[2]);
+    SkPath path = SkPathBuilder()
+                  .moveTo(quadPts[0])
+                  .quadTo(quadPts[1], quadPts[2])
+                  .detach();
     paint.setStrokeWidth(3);
     canvas->drawPath(path, paint);
 }

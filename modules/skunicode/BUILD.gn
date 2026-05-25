@@ -1,4 +1,4 @@
-# Copyright 2021 Google Inc.
+# Copyright 2021 Google LLC
 #
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
@@ -30,14 +30,6 @@ if (skia_use_icu || skia_use_client_icu || skia_use_libgrapheme ||
     }
     if (skia_use_bidi) {
       defines += [ "SK_UNICODE_BIDI_IMPLEMENTATION" ]
-    }
-  }
-
-  config("cpp20") {
-    if (is_win) {
-      cflags_cc = [ "/std:c++20" ]
-    } else {
-      cflags_cc = [ "-std=c++20" ]
     }
   }
 

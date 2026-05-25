@@ -11,6 +11,7 @@
 #include "include/codec/SkGifDecoder.h"
 #include "include/codec/SkJpegDecoder.h"
 #include "include/codec/SkPngChunkReader.h"
+#include "include/codec/SkPngDecoder.h"
 #include "include/core/SkAlphaType.h"
 #include "include/core/SkBitmap.h"
 #include "include/core/SkCanvas.h"
@@ -33,6 +34,7 @@
 #include "include/encode/SkJpegEncoder.h"
 #include "include/encode/SkPngEncoder.h"
 #include "include/encode/SkWebpEncoder.h"
+#include "include/private/SkHdrMetadata.h"
 #include "include/private/base/SkAlign.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkMalloc.h"
@@ -51,6 +53,10 @@
 #include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
 #include "tools/ToolUtils.h"
+
+#if defined(SK_CODEC_DECODES_PNG_WITH_RUST)
+#include "include/codec/SkPngRustDecoder.h"
+#endif
 
 #ifdef SK_ENABLE_ANDROID_UTILS
 #include "client_utils/android/FrontBufferedStream.h"
@@ -873,7 +879,7 @@ DEF_TEST(Codec_Empty, r) {
     test_invalid(r, "invalid_images/ossfuzz6347");
 }
 
-#ifdef PNG_READ_UNKNOWN_CHUNKS_SUPPORTED
+#if defined(SK_CODEC_DECODES_PNG_WITH_LIBPNG) && defined(PNG_READ_UNKNOWN_CHUNKS_SUPPORTED)
 
 #ifndef SK_PNG_DISABLE_TESTS   // reading chunks does not work properly with older versions.
                                // It does not appear that anyone in Google3 is reading chunks.
@@ -1032,7 +1038,7 @@ DEF_TEST(Codec_pngChunkReader, r) {
     REPORTER_ASSERT(r, chunkReader.allHaveBeenSeen());
 }
 #endif // SK_PNG_DISABLE_TESTS
-#endif // PNG_READ_UNKNOWN_CHUNKS_SUPPORTED
+#endif // PNG_READ_UNKNOWN_CHUNKS_SUPPORTED and SK_CODEC_DECODES_PNG_WITH_LIBPNG
 
 // Stream that can only peek up to a limit
 class LimitedPeekingMemStream : public SkStream {
@@ -1114,7 +1120,7 @@ DEF_TEST(Codec_wbmp_restrictive, r) {
     }
 
     // Modify the stream to contain a second byte with some bits set.
-    auto data = SkCopyStreamToData(stream.get());
+    auto data = SkStreamPriv::CopyStreamToData(stream.get());
     uint8_t* writeableData = static_cast<uint8_t*>(data->writable_data());
     writeableData[1] = static_cast<uint8_t>(~0x9F);
 
@@ -1263,10 +1269,10 @@ static void check_round_trip(skiatest::Reporter* r, SkCodec* origCodec, const Sk
     REPORTER_ASSERT(r, SkCodec::kSuccess == result);
 
     // Encode the image to png.
-    SkDynamicMemoryWStream stream;
-    SkASSERT_RELEASE(SkPngEncoder::Encode(&stream, bm1.pixmap(), {}));
+    sk_sp<SkData> data = SkPngEncoder::Encode(bm1.pixmap(), {});
+    SkASSERT_RELEASE(data != nullptr);
 
-    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(stream.detachAsData()));
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
     REPORTER_ASSERT(r, color_type_match(info.colorType(), codec->getInfo().colorType()));
     REPORTER_ASSERT(r, alpha_type_match(info.alphaType(), codec->getInfo().alphaType()));
 
@@ -1278,7 +1284,7 @@ static void check_round_trip(skiatest::Reporter* r, SkCodec* origCodec, const Sk
     REPORTER_ASSERT(r, md5(bm1) == md5(bm2));
 }
 
-DEF_TEST(Codec_PngRoundTrip, r) {
+DEF_TEST(Codec_pngRoundTrip, r) {
     auto codec = SkCodec::MakeFromStream(GetResourceAsStream("images/mandrill_512_q075.jpg"));
 
     SkColorType colorTypesOpaque[] = {
@@ -1773,21 +1779,17 @@ DEF_TEST(Codec_InvalidAnimated, r) {
     }
 }
 
-static void encode_format(SkDynamicMemoryWStream* stream, const SkPixmap& pixmap,
-                          SkEncodedImageFormat format) {
+static sk_sp<SkData> encode_format(const SkPixmap& pixmap, SkEncodedImageFormat format) {
     switch (format) {
         case SkEncodedImageFormat::kPNG:
-            SkPngEncoder::Encode(stream, pixmap, SkPngEncoder::Options());
-            break;
+            return SkPngEncoder::Encode(pixmap, SkPngEncoder::Options());
         case SkEncodedImageFormat::kJPEG:
-            SkJpegEncoder::Encode(stream, pixmap, SkJpegEncoder::Options());
-            break;
+            return SkJpegEncoder::Encode(pixmap, SkJpegEncoder::Options());
         case SkEncodedImageFormat::kWEBP:
-            SkWebpEncoder::Encode(stream, pixmap, SkWebpEncoder::Options());
-            break;
+            return SkWebpEncoder::Encode(pixmap, SkWebpEncoder::Options());
         default:
             SkASSERT(false);
-            break;
+            return nullptr;
     }
 }
 
@@ -1799,18 +1801,14 @@ static void test_encode_icc(skiatest::Reporter* r, SkEncodedImageFormat format) 
     *srgbBitmap.getAddr32(0, 0) = 0;
     SkPixmap pixmap;
     srgbBitmap.peekPixels(&pixmap);
-    SkDynamicMemoryWStream srgbBuf;
-    encode_format(&srgbBuf, pixmap, format);
-    sk_sp<SkData> srgbData = srgbBuf.detachAsData();
+    sk_sp<SkData> srgbData = encode_format(pixmap, format);
     std::unique_ptr<SkCodec> srgbCodec(SkCodec::MakeFromData(srgbData));
     REPORTER_ASSERT(r, srgbCodec->getInfo().colorSpace() == sk_srgb_singleton());
 
     // Test with P3 color space.
-    SkDynamicMemoryWStream p3Buf;
     sk_sp<SkColorSpace> p3 = SkColorSpace::MakeRGB(SkNamedTransferFn::kSRGB, SkNamedGamut::kDisplayP3);
     pixmap.setColorSpace(p3);
-    encode_format(&p3Buf, pixmap, format);
-    sk_sp<SkData> p3Data = p3Buf.detachAsData();
+    sk_sp<SkData> p3Data = encode_format(pixmap, format);
     std::unique_ptr<SkCodec> p3Codec(SkCodec::MakeFromData(p3Data));
     REPORTER_ASSERT(r, p3Codec->getInfo().colorSpace()->gammaCloseToSRGB());
     skcms_Matrix3x3 mat0, mat1;
@@ -2046,9 +2044,9 @@ DEF_TEST(Codec_kBGR_101010x_XR_SkColorType_supported, r) {
             .makeAlphaType(kOpaque_SkAlphaType);
     SkImageInfo dstInfo = srcInfo.makeColorType(kBGR_101010x_XR_SkColorType);
     srcBm.allocPixels(srcInfo);
-    SkDynamicMemoryWStream stream;
-    SkASSERT_RELEASE(SkPngEncoder::Encode(&stream, srcBm.pixmap(), {}));
-    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(stream.detachAsData()));
+    sk_sp<SkData> data = SkPngEncoder::Encode(srcBm.pixmap(), {});
+    SkASSERT_RELEASE(data != nullptr);
+    std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(data));
     SkBitmap dstBm;
     dstBm.allocPixels(dstInfo);
     bool success = codec->getPixels(dstInfo, dstBm.getPixels(), dstBm.rowBytes());
@@ -2179,7 +2177,7 @@ DEF_TEST(Codec_gif_can_preserve_original_data, r) {
 
     // The whole point of DeferredFromCodec is that it allows the client
     // to hold onto the original image data for later.
-    sk_sp<SkData> encodedData = image->refEncodedData();
+    auto encodedData = image->refEncodedData();
     REPORTER_ASSERT(r, encodedData != nullptr);
     // The returned data should the same as what went in.
     REPORTER_ASSERT(r, encodedData->size() == data->size());
@@ -2212,7 +2210,7 @@ DEF_TEST(Codec_jpeg_can_return_data_from_original_stream, r) {
 
     // The whole point of DeferredFromCodec is that it allows the client
     // to hold onto the original image data for later.
-    sk_sp<SkData> encodedData = image->refEncodedData();
+    auto encodedData = image->refEncodedData();
     REPORTER_ASSERT(r, encodedData != nullptr);
     // The returned data should the same as what went in.
     REPORTER_ASSERT(r, encodedData->size() == expectedBytes);
@@ -2282,11 +2280,11 @@ static SkBitmap make_gradient_bitmap(sk_sp<SkColorSpace> cs) {
     const int width = 50;
     const int height = 50;
       // Define the gradient shader.
-    const SkColor colors[] = { SK_ColorRED, SK_ColorYELLOW, SK_ColorGREEN, SK_ColorCYAN,
-                               SK_ColorBLUE, SK_ColorMAGENTA, SK_ColorRED };
+    const SkColor4f colors[] = { SkColors::kRed, SkColors::kYellow, SkColors::kGreen,
+                            SkColors::kCyan, SkColors::kBlue, SkColors::kMagenta, SkColors::kRed };
     const SkPoint points[] = { { 0.0f, 0.0f }, { (float)width, 0.0f } };
-    sk_sp<SkShader> rainbowShader = SkGradientShader::MakeLinear(points, colors, nullptr, 7,
-                        SkTileMode::kClamp);
+    sk_sp<SkShader> rainbowShader = SkShaders::LinearGradient(points,
+                                                            {{colors, {}, SkTileMode::kClamp}, {}});
     SkPaint gradientPaint;
     gradientPaint.setShader(rainbowShader);
 
@@ -2552,4 +2550,88 @@ DEF_TEST(LibpngCodec_f16_trc_tables, r) {
     // This should not crash.
     auto [image, result] = codec->getImage(dstInfo);
     REPORTER_ASSERT(r, result == SkCodec::Result::kSuccess);
+}
+
+// TODO(b/464028670)
+// #if defined(SK_CODEC_DECODES_PNG_WITH_LIBPNG) && defined(SK_CODEC_ENCODES_PNG_WITH_LIBPNG) && !defined(SK_PNG_DISABLE_TESTS)
+// DEF_TEST(PngHdrMetadataRoundTrip, r) {
+//     SkBitmap bm;
+//     bm.allocPixels(SkImageInfo::MakeN32Premul(10, 10));
+
+//     SkPngEncoder::Options options;
+//     options.fHdrMetadata.setMasteringDisplayColorVolume(
+//         skhdr::MasteringDisplayColorVolume({SkNamedPrimaries::kRec2020, 500.f, 0.0005f}));
+//     options.fHdrMetadata.setContentLightLevelInformation(
+//         skhdr::ContentLightLevelInformation({1000.f, 150.f}));
+
+//     sk_sp<SkData> data = SkPngEncoder::Encode(bm.pixmap(), options);
+
+//     SkCodec::Result result;
+//     auto codec = SkPngDecoder::Decode(data, &result);
+
+//     REPORTER_ASSERT(r, options.fHdrMetadata == codec->getHdrMetadata());
+// }
+// #endif
+
+#if defined(SK_CODEC_DECODES_PNG_WITH_RUST) && \
+    defined(SK_CODEC_ENCODES_PNG_WITH_LIBPNG) && \
+    !defined(SK_PNG_DISABLE_TESTS)
+DEF_TEST(PngRustHdrMetadataRoundTrip, r) {
+    SkBitmap bm;
+    bm.allocPixels(SkImageInfo::MakeN32Premul(10, 10));
+
+    // The SkPngRustEncoder doesn't support writing HDR metadata, so this uses the libpng encoder.
+    SkPngEncoder::Options options;
+    options.fHdrMetadata.setMasteringDisplayColorVolume(
+        skhdr::MasteringDisplayColorVolume({SkNamedPrimaries::kRec2020, 500.f, 0.0005f}));
+    options.fHdrMetadata.setContentLightLevelInformation(
+        skhdr::ContentLightLevelInformation({1000.f, 150.f}));
+
+    SkDynamicMemoryWStream wstream;
+    SkPngEncoder::Encode(&wstream, bm.pixmap(), options);
+
+    SkCodec::Result result;
+    auto codec = SkPngRustDecoder::Decode(
+        std::make_unique<SkMemoryStream>(wstream.detachAsData()), &result);
+
+    REPORTER_ASSERT(r, options.fHdrMetadata == codec->getHdrMetadata());
+}
+#endif
+
+// for private SkCodec access
+class SkCodecPriv {
+public:
+    static bool needsRewind(const SkCodec* codec) { return codec->fNeedsRewind; }
+};
+
+DEF_TEST(jpeg_invalid_stream_state, r) {
+    // Invalid/corrupted jpeg data.
+    auto data = GetResourceAsData("invalid_images/b464333052.jpg");
+    REPORTER_ASSERT(r, data);
+    auto codec = SkAndroidCodec::MakeFromData(std::move(data));
+    REPORTER_ASSERT(r, codec);
+
+    REPORTER_ASSERT(r, !SkCodecPriv::needsRewind(codec->codec()));
+
+    const SkImageInfo info = codec->getInfo();
+    SkAutoPixmapStorage pm;
+    pm.alloc(info);
+
+    // Attempt a decode at an odd size, to exercise the sampledDecode path.
+    SkAndroidCodec::AndroidOptions opts;
+    opts.fSampleSize = 7;
+    const SkISize sz = codec->getSampledDimensions(opts.fSampleSize);
+    auto res =
+        codec->getAndroidPixels(info.makeDimensions(sz), pm.writable_addr(), pm.rowBytes(), &opts);
+    // Expected to fail due to bad data.
+    REPORTER_ASSERT(r, res != SkCodec::kSuccess);
+    // But the stream should be rewinded if we attempt other operations.
+    REPORTER_ASSERT(r, SkCodecPriv::needsRewind(codec->codec()));
+
+    // Attempt a decode at the natural size, to exercize the getPixels path.
+    res = codec->getAndroidPixels(info, pm.writable_addr(), pm.rowBytes());
+    // Expected to fail due to bad data.
+    REPORTER_ASSERT(r, res != SkCodec::kSuccess);
+    // But the stream should be rewinded if we attempt other operations.
+    REPORTER_ASSERT(r, SkCodecPriv::needsRewind(codec->codec()));
 }

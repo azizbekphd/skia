@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 #include "include/core/SkFontMetrics.h"
 #include "include/core/SkTextBlob.h"
 #include "include/private/base/SkFloatingPoint.h"
@@ -37,6 +37,8 @@ Run::Run(ParagraphImpl* owner,
     , fBaselineShift(baselineShift)
 {
     fBidiLevel = info.fBidiLevel;
+    fScript = info.fScript;
+    fLanguage = info.fLanguage;
     fAdvance = info.fAdvance;
     fIndex = index;
     fUtf8Range = info.utf8Range;
@@ -55,6 +57,7 @@ Run::Run(ParagraphImpl* owner,
     fOffsets[info.glyphCount] = {0, 0};
     fClusterIndexes[info.glyphCount] = this->leftToRight() ? info.utf8Range.end() : info.utf8Range.begin();
     fEllipsis = false;
+    fHyphen = false;
     fPlaceholderIndex = std::numeric_limits<size_t>::max();
 }
 
@@ -168,7 +171,7 @@ void Run::addSpacesAtTheEnd(SkScalar space, Cluster* cluster) {
     cluster->space(space);
 }
 
-SkScalar Run::addSpacesEvenly(SkScalar space) {
+SkScalar Run::addLetterSpacesEvenly(SkScalar space) {
     SkScalar shift = 0;
     for (size_t i = 0; i < this->size(); ++i) {
         fPositions[i].fX += shift;
@@ -179,7 +182,7 @@ SkScalar Run::addSpacesEvenly(SkScalar space) {
     return shift;
 }
 
-SkScalar Run::addSpacesEvenly(SkScalar space, Cluster* cluster) {
+SkScalar Run::addLetterSpacesEvenly(SkScalar space, Cluster* cluster) {
     // Offset all the glyphs in the cluster
     SkScalar shift = 0;
     for (size_t i = cluster->startPos(); i < cluster->endPos(); ++i) {
@@ -197,6 +200,21 @@ SkScalar Run::addSpacesEvenly(SkScalar space, Cluster* cluster) {
     cluster->setHalfLetterSpacing(space / 2);
 
     return shift;
+}
+
+bool Run::isCursiveScript() const {
+    switch (this->fScript) {
+        case SkSetFourByteTag('A', 'r', 'a', 'b'): // ARABIC
+        case SkSetFourByteTag('R', 'o', 'h', 'g'): // HANIFI_ROHINGYA
+        case SkSetFourByteTag('M', 'a', 'n', 'd'): // MANDAIC
+        case SkSetFourByteTag('M', 'o', 'n', 'g'): // MONGOLIAN
+        case SkSetFourByteTag('N', 'k', 'o', 'o'): // NKO
+        case SkSetFourByteTag('P', 'h', 'a', 'g'): // PHAGS_PA
+        case SkSetFourByteTag('S', 'y', 'r', 'c'): // SYRIAC
+            return true;
+        default:
+            return false;
+    }
 }
 
 void Run::shift(const Cluster* cluster, SkScalar offset) {
@@ -346,6 +364,17 @@ SkFont Cluster::font() const {
 bool Cluster::isSoftBreak() const {
     return fOwner->codeUnitHasProperty(fTextRange.end,
                                        SkUnicode::CodeUnitFlags::kSoftLineBreakBefore);
+}
+
+bool Cluster::isSoftHyphen() const {
+    auto text = fOwner->text();
+    const char* p = text.begin() + fTextRange.start;
+    const char* end = text.begin() + fTextRange.end;
+    if (p >= end) {
+        return false;
+    }
+    SkUnichar cp = SkUTF::NextUTF8(&p, end);
+    return cp == 0x00AD && p == end;
 }
 
 bool Cluster::isGraphemeBreak() const {

@@ -162,8 +162,7 @@ std::unique_ptr<GrGpu> GrVkGpu::Make(const skgpu::VulkanBackendContext& backendC
         // We were not given a memory allocator at creation
         memoryAllocator =
                 skgpu::VulkanMemoryAllocators::Make(backendContext,
-                                                    skgpu::ThreadSafe::kNo,
-                                                    options.fVulkanVMALargeHeapBlockSize);
+                                                    skgpu::ThreadSafe::kNo);
     }
 #endif
     if (!memoryAllocator) {
@@ -876,7 +875,7 @@ static size_t fill_in_compressed_regions(GrStagingBufferManager* stagingBufferMa
     SkASSERT(compression != SkTextureCompressionType::kNone);
     int numMipLevels = 1;
     if (mipmapped == skgpu::Mipmapped::kYes) {
-        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions) + 1;
     }
 
     regions->reserve_exact(regions->size() + numMipLevels);
@@ -1183,7 +1182,7 @@ sk_sp<GrTexture> GrVkGpu::onCreateCompressedTexture(SkISize dimensions,
 
     int numMipLevels = 1;
     if (mipmapped == skgpu::Mipmapped::kYes) {
-        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height())+1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions)+1;
     }
 
     GrMipmapStatus mipmapStatus = (mipmapped == skgpu::Mipmapped::kYes)
@@ -1291,7 +1290,7 @@ static bool check_image_info(const GrVkCaps& caps,
         if (!caps.supportsYcbcrConversion()) {
             return false;
         }
-        if (info.fYcbcrConversionInfo.fExternalFormat != 0) {
+        if (info.fYcbcrConversionInfo.hasExternalFormat()) {
             return true;
         }
     }
@@ -1311,7 +1310,7 @@ static bool check_tex_image_info(const GrVkCaps& caps, const GrVkImageInfo& info
         return false;
     }
 
-    if (info.fYcbcrConversionInfo.isValid() && info.fYcbcrConversionInfo.fExternalFormat != 0) {
+    if (info.fYcbcrConversionInfo.isValid() && info.fYcbcrConversionInfo.hasExternalFormat()) {
         return true;
     }
     if (info.fImageTiling == VK_IMAGE_TILING_OPTIMAL) {
@@ -1664,7 +1663,7 @@ bool GrVkGpu::createVkImageForBackendSurface(VkFormat vkFormat,
 
     int numMipLevels = 1;
     if (mipmapped == skgpu::Mipmapped::kYes) {
-        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions) + 1;
     }
 
     VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_TRANSFER_SRC_BIT |

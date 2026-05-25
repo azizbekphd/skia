@@ -1,11 +1,11 @@
 /*
- * Copyright 2021 Google Inc.
+ * Copyright 2021 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
-// This test only works with the GPU backend.
+// This test only works with the Ganesh backend.
 
 #include "gm/gm.h"
 #include "include/core/SkBlendMode.h"
@@ -23,7 +23,7 @@
 #include "src/gpu/ganesh/GrPaint.h"
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
 #include "src/gpu/ganesh/effects/GrPorterDuffXferProcessor.h"
-#include "tools/gpu/TestOps.h"
+#include "tools/ganesh/TestOps.h"
 
 #include <memory>
 #include <utility>

@@ -21,7 +21,6 @@
 #include "include/private/base/SkTDArray.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkArenaAlloc.h"
-#include "src/base/SkTLazy.h"
 #include "src/core/SkColorData.h"
 #include "src/core/SkGeometry.h"
 #include "src/core/SkMatrixPriv.h"
@@ -703,7 +702,7 @@ std::unique_ptr<GrGeometryProcessor::ProgramImpl> QuadEdgeEffect::makeProgramImp
             fragBuilder->codeAppendf("edgeAlpha = half(%s.x*%s.x - %s.y);", v.fsIn(), v.fsIn(),
                                      v.fsIn());
             fragBuilder->codeAppendf("edgeAlpha = "
-                                     "saturate(0.5 - edgeAlpha / length(gF));}");
+                                     "saturate(0.5 - edgeAlpha / max(length(gF), 1e-6));}");
 
             fragBuilder->codeAppendf("half4 %s = half4(edgeAlpha);", args.fOutputCoverage);
         }
@@ -831,13 +830,12 @@ private:
 
             // We avoid initializing the path unless we have to
             const SkPath* pathPtr = &args.fPath;
-            SkTLazy<SkPath> tmpPath;
+            std::optional<SkPath> tmpPath;
             if (viewMatrix->hasPerspective()) {
-                SkPath* tmpPathPtr = tmpPath.init(*pathPtr);
-                tmpPathPtr->setIsVolatile(true);
-                tmpPathPtr->transform(*viewMatrix);
+                tmpPath.emplace(pathPtr->makeTransform(*viewMatrix));
+                tmpPath->setIsVolatile(true);
+                pathPtr = &tmpPath.value();
                 viewMatrix = &SkMatrix::I();
-                pathPtr = tmpPathPtr;
             }
 
             int vertexCount;
@@ -861,7 +859,7 @@ private:
                                                           &vertexBuffer,
                                                           &firstVertex);
 
-            if (!verts) {
+            if (!verts) SK_UNLIKELY {
                 SkDebugf("Could not allocate vertices\n");
                 return;
             }
@@ -870,7 +868,7 @@ private:
             int firstIndex;
 
             uint16_t *idxs = target->makeIndexSpace(indexCount, &indexBuffer, &firstIndex);
-            if (!idxs) {
+            if (!idxs) SK_UNLIKELY {
                 SkDebugf("Could not allocate indices\n");
                 return;
             }
@@ -971,8 +969,7 @@ bool AAConvexPathRenderer::onDrawPath(const DrawPathArgs& args) {
     SkASSERT(args.fSurfaceDrawContext->numSamples() <= 1);
     SkASSERT(!args.fShape->isEmpty());
 
-    SkPath path;
-    args.fShape->asPath(&path);
+    SkPath path = args.fShape->asPath();
 
     GrOp::Owner op = AAConvexPathOp::Make(args.fContext, std::move(args.fPaint),
                                           *args.fViewMatrix,

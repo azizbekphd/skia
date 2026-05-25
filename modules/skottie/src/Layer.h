@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Google Inc.
+ * Copyright 2019 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -83,7 +83,7 @@ private:
 
     using LayerBuilderFunc =
         sk_sp<sksg::RenderNode> (AnimationBuilder::*)(const skjson::ObjectValue&,
-                                                      AnimationBuilder::LayerInfo*) const;
+                                                      LayerInfo*) const;
     struct BuilderInfo {
         LayerBuilderFunc fBuilder = nullptr;
         uint32_t         fFlags   = 0;
@@ -95,7 +95,7 @@ private:
     const int                  fType;
     const bool                 fAutoOrient;
 
-    AnimationBuilder::LayerInfo fInfo;
+    LayerInfo                  fInfo;
     BuilderInfo                fBuilderInfo;
     sk_sp<sksg::Transform>     fLayerTransform;             // this layer's transform node.
     sk_sp<sksg::Transform>     fTransformCache[2];          // cached 2D/3D chain for the local node

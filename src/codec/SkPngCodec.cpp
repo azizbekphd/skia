@@ -23,6 +23,7 @@
 #include "include/private/base/SkNoncopyable.h"
 #include "include/private/base/SkTemplates.h"
 #include "modules/skcms/skcms.h"
+#include "src/base/SkSafeMath.h"
 #include "src/codec/SkCodecPriv.h"
 #include "src/codec/SkPngCompositeChunkReader.h"
 #include "src/codec/SkPngPriv.h"
@@ -309,8 +310,8 @@ static float png_inverted_fixed_point_to_float(png_fixed_point x) {
 #endif // LIBPNG >= 1.6
 
 // If there is no color profile information, it will use sRGB.
-std::unique_ptr<SkEncodedInfo::ICCProfile> read_color_profile(png_structp png_ptr,
-                                                              png_infop info_ptr) {
+std::unique_ptr<SkCodecs::ColorProfile> read_color_profile(
+        png_structp png_ptr, png_infop info_ptr) {
 
 #if (PNG_LIBPNG_VER_MAJOR > 1) || (PNG_LIBPNG_VER_MAJOR == 1 && PNG_LIBPNG_VER_MINOR >= 6)
     // First check for an ICC profile
@@ -327,7 +328,7 @@ std::unique_ptr<SkEncodedInfo::ICCProfile> read_color_profile(png_structp png_pt
     if (PNG_INFO_iCCP == png_get_iCCP(png_ptr, info_ptr, &name, &compression, &profile,
             &length)) {
         auto data = SkData::MakeWithCopy(profile, length);
-        return SkEncodedInfo::ICCProfile::Make(std::move(data));
+        return SkCodecs::ColorProfile::MakeICCProfile(std::move(data));
     }
 
     // Second, check for sRGB.
@@ -341,7 +342,7 @@ std::unique_ptr<SkEncodedInfo::ICCProfile> read_color_profile(png_structp png_pt
     }
 
     // Default to SRGB gamut.
-    skcms_Matrix3x3 toXYZD50 = skcms_sRGB_profile()->toXYZD50;
+    skcms_Matrix3x3 toXYZD50 = SkNamedGamut::kSRGB;
     // Next, check for chromaticities.
     png_fixed_point chrm[8];
     png_fixed_point gamma;
@@ -378,12 +379,7 @@ std::unique_ptr<SkEncodedInfo::ICCProfile> read_color_profile(png_structp png_pt
         fn = *skcms_sRGB_TransferFunction();
     }
 
-    skcms_ICCProfile skcmsProfile;
-    skcms_Init(&skcmsProfile);
-    skcms_SetTransferFunction(&skcmsProfile, &fn);
-    skcms_SetXYZD50(&skcmsProfile, &toXYZD50);
-
-    return SkEncodedInfo::ICCProfile::Make(skcmsProfile);
+    return SkCodecs::ColorProfile::Make(fn, toXYZD50);
 #else // LIBPNG >= 1.6
     return nullptr;
 #endif // LIBPNG >= 1.6
@@ -686,7 +682,11 @@ private:
 
     Result setUpInterlaceBuffer(int height) {
         fPng_rowbytes = png_get_rowbytes(this->png_ptr(), this->info_ptr());
-        size_t interlaceBufferSize = fPng_rowbytes * height;
+        SkSafeMath m;
+        size_t interlaceBufferSize = m.mul(fPng_rowbytes, static_cast<size_t>(height));
+        if (!m.ok()) {
+            return kInternalError;
+        }
         void* interlaceBufferRaw = nullptr;
         if (interlaceBufferSize) {
            interlaceBufferRaw = sk_malloc_canfail(interlaceBufferSize, sizeof(png_byte));
@@ -896,8 +896,9 @@ void AutoCleanPng::infoCallback(size_t idatLength) {
         }
 #endif // SK_BUILD_FOR_ANDROID_FRAMEWORK
 
-        SkEncodedInfo encodedInfo = SkEncodedInfo::Make(origWidth, origHeight, color, alpha,
-                                                        bitDepth, std::move(profile));
+        SkEncodedInfo encodedInfo = SkEncodedInfo::Make(
+            origWidth, origHeight, color, alpha, bitDepth, bitDepth, std::move(profile),
+            fChunkReader ? fChunkReader->getHdrMetadata() : skhdr::Metadata::MakeEmpty());
         if (1 == numberPasses) {
             *fOutCodec = new SkPngNormalDecoder(std::move(encodedInfo),
                                                 std::unique_ptr<SkStream>(fStream),
@@ -1064,7 +1065,7 @@ bool SkPngCodec::onGetGainmapCodec(SkGainmapInfo* info, std::unique_ptr<SkCodec>
         return false;
     }
 
-    sk_sp<SkData> data = fGainmapStream->getData();
+    sk_sp<const SkData> data = fGainmapStream->getData();
     if (!data) {
         return false;
     }
@@ -1089,9 +1090,9 @@ bool SkPngCodec::onGetGainmapCodec(SkGainmapInfo* info, std::unique_ptr<SkCodec>
         // The ISO gainmap payload does not contain the actual alterative image
         // primaries, so we need to query the ICC profile stored on the gainmap.
         if (info->fGainmapMathColorSpace) {
-            const auto iccProfile = codec->getEncodedInfo().profile();
-            if (iccProfile) {
-                auto colorSpace = SkColorSpace::Make(*iccProfile);
+            const auto* colorProfile = codec->getEncodedInfo().colorProfile();
+            if (colorProfile) {
+                auto colorSpace = colorProfile->getExactColorSpace();
                 if (colorSpace) {
                     info->fGainmapMathColorSpace = std::move(colorSpace);
                 }
@@ -1134,7 +1135,7 @@ std::unique_ptr<SkCodec> Decode(std::unique_ptr<SkStream> stream,
     return SkPngCodec::MakeFromStream(std::move(stream), outResult, chunkReader);
 }
 
-std::unique_ptr<SkCodec> Decode(sk_sp<SkData> data,
+std::unique_ptr<SkCodec> Decode(sk_sp<const SkData> data,
                                 SkCodec::Result* outResult,
                                 SkCodecs::DecodeContext ctx) {
     if (!data) {

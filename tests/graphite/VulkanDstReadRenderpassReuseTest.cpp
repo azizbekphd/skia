@@ -86,9 +86,10 @@ DEF_GRAPHITE_TEST_FOR_VULKAN_CONTEXT(VulkanDstReadsShareRenderpass, reporter, co
                                        SkAlphaType::kPremul_SkAlphaType);
     sk_sp<SkSurface> surface = SkSurfaces::RenderTarget(recorder.get(), ii);
     SkCanvas* canvas = surface->getCanvas();
+    SharedContext* sharedContext = context->priv().sharedContext();
 
     TextureFormat targetFormat = TextureInfoPriv::ViewFormat(
-            static_cast<const Surface*>(surface.get())->backingTextureProxy()->textureInfo());
+            static_cast<const Surface*>(surface.get())->target().proxy()->textureInfo());
 
     // Select which blend modes to use for testing: one that we do expect to require a dst read on
     // most hardware and one we do not. Assert that the dst read requirements of the modes align to
@@ -110,7 +111,7 @@ DEF_GRAPHITE_TEST_FOR_VULKAN_CONTEXT(VulkanDstReadsShareRenderpass, reporter, co
 
     // Determine the number of renderpasses used for later comparison, asserting we have at least 1.
     ResourceTypeQuantifier renderpassQuantifier { SkString("RenderPass") };
-    recorder->dumpMemoryStatistics(&renderpassQuantifier);
+    sharedContext->dumpMemoryStatistics(&renderpassQuantifier);
     const int numRenderPassesNoDstRead = renderpassQuantifier.numResourcesWithTypeSubstr();
     REPORTER_ASSERT(reporter, numRenderPassesNoDstRead > 0);
 
@@ -119,7 +120,7 @@ DEF_GRAPHITE_TEST_FOR_VULKAN_CONTEXT(VulkanDstReadsShareRenderpass, reporter, co
     canvas->drawColor(SK_ColorYELLOW, dstReadBlendMode);
     std::unique_ptr<Recording> dstReadRecording = recorder->snap();
     renderpassQuantifier.resetCount();
-    recorder->dumpMemoryStatistics(&renderpassQuantifier);
+    sharedContext->dumpMemoryStatistics(&renderpassQuantifier);
     const int numRenderPassesAfterDstRead = renderpassQuantifier.numResourcesWithTypeSubstr();
 
     // Assert that no new renderpasses have been added to the cache, meaning that one was reused

@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "docs/examples/50_percent_gray.cpp"
 #include "docs/examples/50_percent_srgb.cpp"
@@ -495,7 +495,6 @@
 #include "docs/examples/Path_AddPathMode.cpp"
 #include "docs/examples/Path_ArcSize.cpp"
 #include "docs/examples/Path_ConvertConicToQuads.cpp"
-#include "docs/examples/Path_ConvertToNonInverseFillType.cpp"
 #include "docs/examples/Path_Effect_Methods.cpp"
 #include "docs/examples/Path_FillType_a.cpp"
 #include "docs/examples/Path_IsCubicDegenerate.cpp"
@@ -579,8 +578,6 @@
 #include "docs/examples/Path_rQuadTo.cpp"
 #include "docs/examples/Path_readFromMemory.cpp"
 #include "docs/examples/Path_reset.cpp"
-#include "docs/examples/Path_reverseAddPath.cpp"
-#include "docs/examples/Path_rewind.cpp"
 #include "docs/examples/Path_serialize.cpp"
 #include "docs/examples/Path_setFillType.cpp"
 #include "docs/examples/Path_setIsVolatile.cpp"

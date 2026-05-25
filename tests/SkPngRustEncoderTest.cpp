@@ -1,11 +1,11 @@
 /*
- * Copyright 2024 Google LLC.
+ * Copyright 2024 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
-#include "experimental/rust_png/encoder/SkPngRustEncoder.h"
+#include "include/encode/SkPngRustEncoder.h"
 
 #include "include/core/SkBitmap.h"
 #include "include/core/SkPixmap.h"

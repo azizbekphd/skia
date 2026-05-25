@@ -163,6 +163,7 @@ void ResourceCache::insertResource(Resource* resource,
 Resource* ResourceCache::findAndRefResource(const GraphiteResourceKey& key,
                                             Budgeted budgeted,
                                             Shareable shareable,
+                                            std::string_view label,
                                             const ScratchResourceSet* unavailable) {
     ASSERT_SINGLE_OWNER
 
@@ -202,9 +203,24 @@ Resource* ResourceCache::findAndRefResource(const GraphiteResourceKey& key,
                 resource->setBudgeted(Budgeted::kNo);
                 fBudgetedBytes -= resource->gpuMemorySize();
             }
+            // It is safe to update non-shareable resources when returning them from the cache.
+            resource->setLabel(label);
+            resource->synchronizeBackendLabel();
         } else {
             // Shareable and scratch resources should never be requested as non-budgeted
             SkASSERT(budgeted == Budgeted::kYes);
+
+            // TODO(b/387505250): Eventually, scratch resource label updates will be uniquely
+            // handled per the threadsafe label update model outlined in Resource.h. For now,
+            // maintain original functionality by allowing label reassignment here.
+            if (shareable == Shareable::kScratch) {
+                resource->setLabel(label);
+                resource->synchronizeBackendLabel();
+            } else {
+                // Shareable resource labels should never change after initial creation.
+                SkASSERT(shareable == Shareable::kYes && resource->getLabel() == label);
+            }
+
             resource->setShareable(shareable);
         }
         this->refAndMakeResourceMRU(resource);
@@ -263,11 +279,14 @@ bool ResourceCache::returnResource(Resource* resource) {
     // itself to be reused. On Dawn/WebGPU we use this to remap kXferCpuToGpu buffers asynchronously
     // so that they are already mapped before they come out of the cache again.
     if (resource->shouldDeleteASAP() == Resource::DeleteASAP::kNo &&
-        resource->shareable() == Shareable::kNo) {
+        resource->requiresPrepareForReturnToCache()) {
         // If we get here, we know the usage ref count is 0, so the only way for that to increase
         // again is if the Resource triggers the initial usage ref in the callback.
-        SkDEBUGCODE(bool takeRefActuallyCalled = false;)
-        bool takeRefCalled = resource->prepareForReturnToCache([&] {
+        struct TakeRefContext {
+            Resource* resource;
+            SkDEBUGCODE(bool takeRefActuallyCalled = false;)
+        } ctx = {resource};
+        bool takeRefCalled = resource->prepareForReturnToCache([](void* ctx) {
                 // This adds a usage ref AND removes the return queue ref. When returnResource()
                 // returns true, the cache takes responsibility for releasing the return queue ref.
                 // If we returned false from returnResource() when the resource invokes the takeRef
@@ -290,13 +309,14 @@ bool ResourceCache::returnResource(Resource* resource) {
                 // return false from prepareForReturnToCache() so that cache shutdown is detected.
                 // This can add unnecessary preparation work for resources that won't ever be used,
                 // but keeps the preparation logic relatively simple w/o needing a mutex.
-                resource->initialUsageRef();
-                resource->unrefReturnQueue();
+                auto* context = static_cast<TakeRefContext*>(ctx);
+                context->resource->initialUsageRef();
+                context->resource->unrefReturnQueue();
 
-                SkDEBUGCODE(takeRefActuallyCalled = true;
-            )});
+                SkDEBUGCODE(context->takeRefActuallyCalled = true;
+            )}, &ctx);
 
-        SkASSERT(takeRefCalled == takeRefActuallyCalled);
+        SkASSERT(takeRefCalled == ctx.takeRefActuallyCalled);
         if (takeRefCalled) {
             // Return 'true' here because we've removed the return queue ref already and don't
             // want Resource to try and do that again. But since we added an initial ref, this
@@ -588,28 +608,39 @@ void ResourceCache::purgeAsNeeded() {
     this->validate();
 }
 
-void ResourceCache::purgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime) {
+void ResourceCache::purgeResourcesNotUsedSince(
+        StdSteadyClock::time_point purgeTime,
+        std::optional<StdSteadyClock::time_point> quitPurgingTime) {
     ASSERT_SINGLE_OWNER
-    this->purgeResources(&purgeTime);
+    this->purgeResources(&purgeTime, quitPurgingTime);
 }
 
 void ResourceCache::purgeResources() {
     ASSERT_SINGLE_OWNER
-    this->purgeResources(nullptr);
+    this->purgeResources(/*purgeTime=*/nullptr, /*quitPurgingTime=*/std::nullopt);
 }
 
-void ResourceCache::purgeResources(const StdSteadyClock::time_point* purgeTime) {
+void ResourceCache::purgeResources(const StdSteadyClock::time_point* purgeTime,
+                                   std::optional<StdSteadyClock::time_point> quitPurgingTime) {
     TRACE_EVENT0("skia.gpu.cache", TRACE_FUNC);
     if (fProxyCache) {
-        fProxyCache->purgeProxiesNotUsedSince(purgeTime);
+        fProxyCache->purgeProxiesNotUsedSince(purgeTime, quitPurgingTime);
     }
     this->processReturnedResources();
 
+    auto time_remains_before_stop_time = [&]() {
+        return !quitPurgingTime.has_value() ||
+               skgpu::StdSteadyClock::now() < quitPurgingTime.value();
+    };
+
     // Early out if the very first item is too new to purge to avoid sorting the queue when
-    // nothing will be deleted.
+    // nothing will be deleted or if we have somehow already exceeded the time limit for purging.
     if (fPurgeableQueue.count() &&
         purgeTime &&
         fPurgeableQueue.peek()->lastAccessTime() >= *purgeTime) {
+        return;
+    }
+    if (!time_remains_before_stop_time()) {
         return;
     }
 
@@ -630,15 +661,19 @@ void ResourceCache::purgeResources(const StdSteadyClock::time_point* purgeTime) 
         *resourcesToPurge.append() = resource;
     }
 
-    // Delete the scratch resources. This must be done as a separate pass
-    // to avoid messing up the sorted order of the queue
+    // Delete the scratch resources. This must be done as a separate pass to avoid messing up the
+    // sorted order of the queue.
     for (int i = 0; i < resourcesToPurge.size(); i++) {
         this->purgeResource(resourcesToPurge[i]);
+        if (!time_remains_before_stop_time()) {
+            break;
+        }
     }
 
     // Since we called process returned resources at the start of this call, we could still end up
     // over budget even after purging resources based on purgeTime. So we call purgeAsNeeded at the
-    // end here.
+    // end here. Not limited by latest purge end time - purging to not go over memory budget takes
+    // precedence.
     this->purgeAsNeeded();
 }
 

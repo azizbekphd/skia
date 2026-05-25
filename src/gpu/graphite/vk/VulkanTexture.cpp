@@ -10,9 +10,13 @@
 #include "include/gpu/MutableTextureState.h"
 #include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
 #include "include/gpu/vk/VulkanMutableTextureState.h"
+#include "src/core/SkCompressedDataUtils.h"
 #include "src/core/SkMipmap.h"
+#include "src/gpu/DataUtils.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/Sampler.h"
+#include "src/gpu/graphite/TextureProxy.h"
+#include "src/gpu/graphite/task/UploadTask.h"
 #include "src/gpu/graphite/vk/VulkanCaps.h"
 #include "src/gpu/graphite/vk/VulkanCommandBuffer.h"
 #include "src/gpu/graphite/vk/VulkanDescriptorSet.h"
@@ -22,6 +26,8 @@
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/gpu/vk/VulkanMemory.h"
 #include "src/gpu/vk/VulkanMutableTextureStatePriv.h"
+
+using namespace skia_private;
 
 namespace skgpu::graphite {
 
@@ -56,12 +62,7 @@ bool VulkanTexture::MakeVkImage(const VulkanSharedContext* sharedContext,
                                            : VK_IMAGE_LAYOUT_UNDEFINED;
 
     // Create Image
-    VkSampleCountFlagBits vkSamples;
-    if (!SampleCountToVkSampleCount(vkInfo.fSampleCount, &vkSamples)) {
-        SKGPU_LOG_E("Failed creating VkImage because we could not covert the number of samples: "
-                    "%u to a VkSampleCountFlagBits.", info.numSamples());
-        return false;
-    }
+    VkSampleCountFlagBits vkSamples = SampleCountToVkSampleCount(info.sampleCount());
 
     SkASSERT(!isLinear || vkSamples == VK_SAMPLE_COUNT_1_BIT);
     SkASSERT(info.isProtected() == Protected::kNo ||
@@ -69,7 +70,7 @@ bool VulkanTexture::MakeVkImage(const VulkanSharedContext* sharedContext,
 
     uint32_t numMipLevels = 1;
     if (vkInfo.fMipmapped == Mipmapped::kYes) {
-        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions) + 1;
     }
 
     uint32_t width = static_cast<uint32_t>(dimensions.fWidth);
@@ -161,7 +162,8 @@ bool VulkanTexture::MakeVkImage(const VulkanSharedContext* sharedContext,
 sk_sp<Texture> VulkanTexture::Make(const VulkanSharedContext* sharedContext,
                                    SkISize dimensions,
                                    const TextureInfo& info,
-                                   sk_sp<VulkanYcbcrConversion> ycbcrConversion) {
+                                   sk_sp<VulkanYcbcrConversion> ycbcrConversion,
+                                   std::string_view label) {
     CreatedImageInfo imageInfo;
     if (!MakeVkImage(sharedContext, dimensions, info, &imageInfo)) {
         return nullptr;
@@ -174,7 +176,8 @@ sk_sp<Texture> VulkanTexture::Make(const VulkanSharedContext* sharedContext,
                                             imageInfo.fImage,
                                             imageInfo.fMemoryAlloc,
                                             Ownership::kOwned,
-                                            std::move(ycbcrConversion)));
+                                            std::move(ycbcrConversion),
+                                            label));
 }
 
 sk_sp<Texture> VulkanTexture::MakeWrapped(const VulkanSharedContext* sharedContext,
@@ -183,7 +186,8 @@ sk_sp<Texture> VulkanTexture::MakeWrapped(const VulkanSharedContext* sharedConte
                                           sk_sp<MutableTextureState> mutableState,
                                           VkImage image,
                                           const VulkanAlloc& alloc,
-                                          sk_sp<VulkanYcbcrConversion> ycbcrConversion) {
+                                          sk_sp<VulkanYcbcrConversion> ycbcrConversion,
+                                          std::string_view label) {
     return sk_sp<Texture>(new VulkanTexture(sharedContext,
                                             dimensions,
                                             info,
@@ -191,7 +195,8 @@ sk_sp<Texture> VulkanTexture::MakeWrapped(const VulkanSharedContext* sharedConte
                                             image,
                                             alloc,
                                             Ownership::kWrapped,
-                                            std::move(ycbcrConversion)));
+                                            std::move(ycbcrConversion),
+                                            label));
 }
 
 VulkanTexture::~VulkanTexture() {}
@@ -200,7 +205,6 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
                                                 VkImageLayout newLayout,
                                                 VkAccessFlags dstAccessMask,
                                                 VkPipelineStageFlags dstStageMask,
-                                                bool byRegion,
                                                 uint32_t newQueueFamilyIndex) const {
 
     SkASSERT(newLayout == this->currentLayout() ||
@@ -275,7 +279,7 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
     uint32_t numMipLevels = 1;
     SkISize dimensions = this->dimensions();
     if (this->mipmapped() == Mipmapped::kYes) {
-        numMipLevels = SkMipmap::ComputeLevelCount(dimensions.width(), dimensions.height()) + 1;
+        numMipLevels = SkMipmap::ComputeLevelCount(dimensions) + 1;
     }
     VkImageMemoryBarrier imageMemoryBarrier = {
         VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,          // sType
@@ -290,7 +294,7 @@ void VulkanTexture::setImageLayoutAndQueueIndex(VulkanCommandBuffer* cmdBuffer,
         { aspectFlags, 0, numMipLevels, 0, 1 }           // subresourceRange
     };
     SkASSERT(srcAccessMask == imageMemoryBarrier.srcAccessMask);
-    cmdBuffer->addImageMemoryBarrier(this, srcStageMask, dstStageMask, byRegion,
+    cmdBuffer->addImageMemoryBarrier(this, srcStageMask, dstStageMask, /*byRegion=*/false,
                                      &imageMemoryBarrier);
 
     skgpu::MutableTextureStates::SetVkImageLayout(this->mutableState(), newLayout);
@@ -319,17 +323,21 @@ VulkanTexture::VulkanTexture(const VulkanSharedContext* sharedContext,
                              VkImage image,
                              const VulkanAlloc& alloc,
                              Ownership ownership,
-                             sk_sp<VulkanYcbcrConversion> ycbcrConversion)
+                             sk_sp<VulkanYcbcrConversion> ycbcrConversion,
+                             std::string_view label)
         : Texture(sharedContext,
                   dimensions,
                   info,
                   uses_lazy_memory(alloc),
                   std::move(mutableState),
-                  ownership)
+                  ownership,
+                  label)
         , fImage(image)
         , fMemoryAlloc(alloc)
         , fYcbcrConversion(std::move(ycbcrConversion)) {
     SkASSERT(!uses_lazy_memory(fMemoryAlloc) || has_transient_usage(info));
+    // Update the newly-created underlying GPU object's label to match the Resource's
+    this->synchronizeBackendLabel();
 }
 
 void VulkanTexture::freeGpuData() {
@@ -386,17 +394,15 @@ VkAccessFlags VulkanTexture::LayoutToSrcAccessMask(const VkImageLayout layout) {
     // VK_MEMORY_OUTPUT_SHADER_WRITE_BIT.
 
     // We can only directly access the host memory if we are in preinitialized or general layout,
-    // and the image is linear.
-    // TODO: Add check for linear here so we are not always adding host to general, and we should
-    //       only be in preinitialized if we are linear
+    // and the image is linear. However, device access to images written by the host happens after
+    // vkQueueSubmit, which implicitly makes host writes _visible_ to the device, i.e.
+    // VK_ACCESS_HOST_WRITE_BIT is unnecessary. Host data is made _available_ to the device via
+    // vkFlushMappedMemoryRanges.
     VkAccessFlags flags = 0;
     if (VK_IMAGE_LAYOUT_GENERAL == layout) {
         flags = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-                VK_ACCESS_TRANSFER_WRITE_BIT |
-                VK_ACCESS_HOST_WRITE_BIT;
-    } else if (VK_IMAGE_LAYOUT_PREINITIALIZED == layout) {
-        flags = VK_ACCESS_HOST_WRITE_BIT;
+                VK_ACCESS_TRANSFER_WRITE_BIT;
     } else if (VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL == layout) {
         flags = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
     } else if (VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL == layout) {
@@ -405,7 +411,8 @@ VkAccessFlags VulkanTexture::LayoutToSrcAccessMask(const VkImageLayout layout) {
         flags = VK_ACCESS_TRANSFER_WRITE_BIT;
     } else if (VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL == layout ||
                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL == layout ||
-               VK_IMAGE_LAYOUT_PRESENT_SRC_KHR == layout) {
+               VK_IMAGE_LAYOUT_PRESENT_SRC_KHR == layout ||
+               VK_IMAGE_LAYOUT_PREINITIALIZED == layout) {
         // There are no writes that need to be made available
         flags = 0;
     }
@@ -422,8 +429,7 @@ const VulkanImageView* VulkanTexture::getImageView(VulkanImageView::Usage usage)
     auto sharedContext = static_cast<const VulkanSharedContext*>(this->sharedContext());
     const auto& vkTexInfo = this->vulkanTextureInfo();
     int miplevels = vkTexInfo.fMipmapped == Mipmapped::kYes
-                    ? SkMipmap::ComputeLevelCount(this->dimensions().width(),
-                                                  this->dimensions().height()) + 1
+                    ? SkMipmap::ComputeLevelCount(this->dimensions()) + 1
                     : 1;
     auto imageView = VulkanImageView::Make(sharedContext,
                                            fImage,
@@ -486,6 +492,120 @@ sk_sp<VulkanFramebuffer> VulkanTexture::getCachedFramebuffer(
 void VulkanTexture::addCachedFramebuffer(sk_sp<VulkanFramebuffer> fb) {
     SkASSERT(fb);
     fCachedFramebuffers.push_back(std::move(fb));
+}
+
+bool VulkanTexture::canUploadOnHost() const {
+    // Can't use host-image-copy if the usage flag is not set.
+    if ((this->vulkanTextureInfo().fImageUsageFlags & VK_IMAGE_USAGE_HOST_TRANSFER_BIT) == 0) {
+        return false;
+    }
+
+    // Can't use host-image-copy if the image is busy on the GPU. While UploadSource was responsible
+    // for ensuring the TextureProxy was uniquely held (so other threads can't add work for that
+    // proxy), we have to ensure the host upload won't conflict with any other use of the texture:
+    //  - The texture could be used on the GPU by some now-deleted proxy, so we'll have to fall
+    //    back to a regular upload via command buffer submission.
+    //  - The texture needs to be non-shareable, otherwise multiple proxies could be instantiated
+    //    with the same proxy.
+    if (this->shareable() != Shareable::kNo || this->isBusyOnGPU()) {
+        return false;
+    }
+
+    // For now, only use host-image-copy if the image has never been used. If needed in the future,
+    // we could inspect the VkPhysicalDeviceHostImageCopyProperties::pCopySrcLayouts array to know
+    // which layouts the image can be to be used with HIC. However, a better solution could be to
+    // recreate the VkImage even if the existing one is busy on the GPU, since this function
+    // entirely overwrites the texture anyway.
+    if (this->currentLayout() != VK_IMAGE_LAYOUT_UNDEFINED) {
+        return false;
+    }
+
+    return true;
+}
+
+bool VulkanTexture::uploadDataOnHost(const UploadSource& source) {
+    // Should not have changed since canUploadOnHost() returned true given the usage possibilities
+    // implied by these constraints (current thread is the only possible mutator).
+    SkASSERT(source.formatXferFn().isIdentity());
+    SkASSERT(source.view().proxy()->unique());
+    SkASSERT(source.view().proxy()->texture() == this);
+    SkASSERT(this->shareable() == Shareable::kNo);
+    SkASSERT(!this->isBusyOnGPU());
+    SkASSERT(this->vulkanTextureInfo().fImageUsageFlags & VK_IMAGE_USAGE_HOST_TRANSFER_BIT);
+    SkASSERT(this->currentLayout() == VK_IMAGE_LAYOUT_UNDEFINED);
+
+    auto sharedContext = static_cast<const VulkanSharedContext*>(this->sharedContext());
+    SkSpan<const MipLevel> levels = source.levels();
+    const unsigned int mipLevelCount = levels.size();
+
+    const TextureInfo& textureInfo = this->textureInfo();
+    const TextureFormat format = TextureInfoPriv::ViewFormat(textureInfo);
+    const VkImageAspectFlags aspectFlags = GetVkImageAspectFlags(format);
+
+    SkASSERT(this->currentLayout() == VK_IMAGE_LAYOUT_UNDEFINED);
+
+    VkHostImageLayoutTransitionInfo transition = {};
+    transition.sType = VK_STRUCTURE_TYPE_HOST_IMAGE_LAYOUT_TRANSITION_INFO;
+    transition.image = fImage;
+    transition.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    transition.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    transition.subresourceRange.aspectMask = aspectFlags;
+    transition.subresourceRange.levelCount = mipLevelCount;
+    transition.subresourceRange.layerCount = 1;
+
+    if (VULKAN_CALL(sharedContext->interface(),
+                    TransitionImageLayout(sharedContext->device(), 1, &transition)) != VK_SUCCESS) {
+        return false;
+    }
+    this->updateImageLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    TArray<VkMemoryToImageCopy> copyRegions(mipLevelCount);
+
+    // The assumption is either that we have no mipmaps, or that our rect is the entire texture,
+    // which is guaranteed by UploadSource's creation.
+    const SkIRect& dstRect = source.dstRect();
+    SkASSERT(mipLevelCount == 1 || dstRect == SkIRect::MakeSize(this->dimensions()));
+
+    // Copy data mip by mip.
+    const int32_t offsetX = dstRect.x();
+    const int32_t offsetY = dstRect.y();
+    int32_t currentWidth = dstRect.width();
+    int32_t currentHeight = dstRect.height();
+
+    const int bpp = TextureFormatBytesPerBlock(TextureInfoPriv::ViewFormat(this->textureInfo()));
+    for (unsigned int currentMipLevel = 0; currentMipLevel < mipLevelCount; currentMipLevel++) {
+        VkMemoryToImageCopy copyRegion = {};
+        copyRegion.sType = VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY;
+        copyRegion.pHostPointer = levels[currentMipLevel].fPixels;
+        copyRegion.memoryRowLength = levels[currentMipLevel].fRowBytes / bpp;
+        copyRegion.memoryImageHeight = 0;  // Tightly packed
+        copyRegion.imageSubresource.aspectMask = aspectFlags;
+        copyRegion.imageSubresource.mipLevel = currentMipLevel;
+        copyRegion.imageSubresource.layerCount = 1;
+        copyRegion.imageOffset.x = offsetX;
+        copyRegion.imageOffset.y = offsetY;
+        copyRegion.imageExtent.width = currentWidth;
+        copyRegion.imageExtent.height = currentHeight;
+        copyRegion.imageExtent.depth = 1;
+
+        copyRegions.push_back(copyRegion);
+
+        // Calculate the extent for the next mip. The offset does not need modification, since it's
+        // zero if mipLevelCount > 1, asserted before the loop.
+        currentWidth = std::max(1, currentWidth / 2);
+        currentHeight = std::max(1, currentHeight / 2);
+    }
+
+    VkCopyMemoryToImageInfo copyInfo = {};
+    copyInfo.sType = VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO;
+    copyInfo.dstImage = fImage;
+    copyInfo.dstImageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    copyInfo.regionCount = mipLevelCount;
+    copyInfo.pRegions = copyRegions.data();
+
+    const VkResult result = VULKAN_CALL(sharedContext->interface(),
+                                        CopyMemoryToImage(sharedContext->device(), &copyInfo));
+    return result == VK_SUCCESS;
 }
 
 } // namespace skgpu::graphite

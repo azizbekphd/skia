@@ -1,11 +1,12 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_arcTo_3, 256, 256, true, 0) {
 void draw(SkCanvas* canvas) {
-    SkPath path;
-    path.moveTo({156, 20});
-    path.arcTo({200, 20}, {170, 20}, 50);
+    SkPath path = SkPathBuilder()
+                  .moveTo({156, 20})
+                  .arcTo({200, 20}, {170, 20}, 50)
+                  .detach();
     SkPath::Iter iter(path, false);
     while (auto rec = iter.next()) {
         SkSpan<const SkPoint> p = rec->fPoints;

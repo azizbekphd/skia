@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE_ANIMATED(l_system_plant, 256, 256, false, 0, 3) {
@@ -50,7 +50,7 @@ void draw(SkCanvas* canvas) {
   std::string plant = E(E(E(E(E("X")))));
   const double len = 2.5;
   struct Pt pt = {128, 256, 3.14};
-  SkPath path;
+  SkPathBuilder path;
   path.moveTo(pt.x, pt.y);
 
   for (std::string::iterator it=plant.begin(); it!=plant.end(); ++it) {
@@ -70,6 +70,6 @@ void draw(SkCanvas* canvas) {
       path.moveTo(pt.x, pt.y);
     }
   }
-  canvas->drawPath(path, p);
+  canvas->drawPath(path.detach(), p);
 }
 }  // END FIDDLE

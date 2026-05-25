@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 
 // Proof of principle of a text editor written with Skia & SkShaper.
@@ -401,14 +401,14 @@ struct EditorLayer : public sk_app::Window::Layer {
     }
 };
 
-#ifdef SK_VULKAN
-static constexpr sk_app::Window::BackendType kBackendType = sk_app::Window::kVulkan_BackendType;
-#elif SK_METAL
-static constexpr sk_app::Window::BackendType kBackendType = sk_app::Window::kMetal_BackendType;
-#elif SK_GL
-static constexpr sk_app::Window::BackendType kBackendType = sk_app::Window::kNativeGL_BackendType;
+#if defined(SK_VULKAN)
+static constexpr sk_app::Window::BackendType kBackendType = sk_app::Window::BackendType::kVulkan;
+#elif defined(SK_METAL)
+static constexpr sk_app::Window::BackendType kBackendType = sk_app::Window::BackendType::kMetal;
+#elif defined(SK_GL)
+static constexpr sk_app::Window::BackendType kBackendType = sk_app::Window::BackendType::kNativeGL;
 #else
-static constexpr sk_app::Window::BackendType kBackendType = sk_app::Window::kRaster_BackendType;
+static constexpr sk_app::Window::BackendType kBackendType = sk_app::Window::BackendType::kRaster;
 #endif
 
 struct EditorApplication : public sk_app::Application {

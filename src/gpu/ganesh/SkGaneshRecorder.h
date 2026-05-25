@@ -10,7 +10,9 @@
 
 #include "include/core/SkCPURecorder.h"
 #include "include/core/SkRecorder.h"
+#include "include/core/SkSurface.h"
 #include "include/gpu/ganesh/GrRecordingContext.h"
+#include "src/capture/SkCaptureManager.h"
 
 class GrDirectContext;
 
@@ -32,6 +34,7 @@ private:
     GrRecordingContext* fGaneshCtx;
 
     SkCanvas* makeCaptureCanvas(SkCanvas*) override { return nullptr; }
+    SkContentID createCaptureBreakpoint(SkSurface*) override { return SkContentID(); }
 };
 
 inline SkGaneshRecorder* AsGaneshRecorder(SkRecorder* recorder) {

@@ -13,7 +13,7 @@
 #include "include/core/SkRegion.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkTypeface.h"
-#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkGradient.h"
 #include "include/utils/SkCamera.h"
 #include "src/base/SkTime.h"
 #include "src/base/SkUTF.h"
@@ -23,10 +23,10 @@
 #include "tools/viewer/Slide.h"
 
 static void make_paint(SkPaint* paint, const SkMatrix& localMatrix) {
-    SkColor colors[] = { 0, SK_ColorWHITE };
+    SkColor4f colors[] = { SkColors::kTransparent, SkColors::kWhite };
     SkPoint pts[] = { { 0, 0 }, { 0, SK_Scalar1*20 } };
-    paint->setShader(SkGradientShader::MakeLinear(pts, colors, nullptr, 2,
-                                                  SkTileMode::kClamp, 0, &localMatrix));
+    paint->setShader(SkShaders::LinearGradient(pts, {{colors, {}, SkTileMode::kClamp}, {}},
+                                               &localMatrix));
     paint->setBlendMode(SkBlendMode::kDstIn);
 }
 
@@ -184,12 +184,11 @@ protected:
 
         const SkScalar w = 250;
         const SkScalar h = 150;
-        SkPath path;
-        path.addOval(SkRect::MakeXYWH(-w/2, -h/2, w, h));
+        SkPath path = SkPath::Oval(SkRect::MakeXYWH(-w/2, -h/2, w, h));
         SkMatrix m;
         m.setRotate(fAngle);
         m.postTranslate(fCenter.x(), fCenter.y());
-        path.transform(m);
+        path = path.makeTransform(m);
 
         canvas->clipPath(path, SkClipOp::kIntersect, true);
         const SkRect bounds = path.getBounds();

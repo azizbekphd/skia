@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google Inc.
+ * Copyright 2017 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -61,7 +61,7 @@ protected:
     SkPath onAsPath() const override;
 
 private:
-    Merge(std::vector<Rec>&& recs);
+    explicit Merge(std::vector<Rec>&& recs);
 
     const std::vector<Rec> fRecs;
     SkPath                 fMerged;

@@ -30,9 +30,7 @@ namespace skgpu::graphite {
 
 namespace {
 
-constexpr int kBufferBindingSizeAlignment = 16;
-constexpr int kMaxNumberOfCachedBufferBindGroups = 1024;
-constexpr int kMaxNumberOfCachedTextureBindGroups = 4096;
+constexpr uint32_t kBufferBindingSizeAlignment = 16;
 
 wgpu::ShaderModule create_shader_module(const wgpu::Device& device, const char* source) {
 #if defined(__EMSCRIPTEN__)
@@ -53,7 +51,7 @@ wgpu::RenderPipeline create_blit_render_pipeline(const DawnSharedContext* shared
                                                  const char* fsEntryPoint,
                                                  wgpu::TextureFormat renderPassColorFormat,
                                                  wgpu::TextureFormat renderPassDepthStencilFormat,
-                                                 int numSamples) {
+                                                 SampleCount sampleCount) {
     wgpu::RenderPipelineDescriptor descriptor;
     descriptor.label = label;
     descriptor.layout = nullptr;
@@ -93,7 +91,7 @@ wgpu::RenderPipeline create_blit_render_pipeline(const DawnSharedContext* shared
     descriptor.primitive.topology = wgpu::PrimitiveTopology::TriangleStrip;
     descriptor.primitive.stripIndexFormat = wgpu::IndexFormat::Undefined;
 
-    descriptor.multisample.count = numSamples;
+    descriptor.multisample.count = (uint8_t) sampleCount;
     descriptor.multisample.mask = 0xFFFFFFFF;
     descriptor.multisample.alphaToCoverageEnabled = false;
 
@@ -108,57 +106,7 @@ wgpu::RenderPipeline create_blit_render_pipeline(const DawnSharedContext* shared
 
     return pipeline;
 }
-
-template <size_t NumEntries>
-using BindGroupKey = typename DawnResourceProvider::BindGroupKey<NumEntries>;
-using UniformBindGroupKey = BindGroupKey<DawnResourceProvider::kNumUniformEntries>;
-
-UniformBindGroupKey make_ubo_bind_group_key(
-        const std::array<std::pair<const DawnBuffer*, uint32_t>,
-                         DawnResourceProvider::kNumUniformEntries>& boundBuffersAndSizes) {
-    UniformBindGroupKey uniqueKey;
-    {
-        // Each entry in the bind group needs 2 uint32_t in the key:
-        //  - buffer's unique ID: 32 bits.
-        //  - buffer's binding size: 32 bits.
-        // We need total of 4 entries in the uniform buffer bind group.
-        // Unused entries will be assigned zero values.
-        UniformBindGroupKey::Builder builder(&uniqueKey);
-
-        for (uint32_t i = 0; i < boundBuffersAndSizes.size(); ++i) {
-            const DawnBuffer* boundBuffer = boundBuffersAndSizes[i].first;
-            const uint32_t bindingSize = boundBuffersAndSizes[i].second;
-            if (boundBuffer) {
-                builder[2 * i] = boundBuffer->uniqueID().asUInt();
-                builder[2 * i + 1] = bindingSize;
-            } else {
-                builder[2 * i] = 0;
-                builder[2 * i + 1] = 0;
-            }
-        }
-
-        builder.finish();
-    }
-
-    return uniqueKey;
-}
-
-BindGroupKey<1> make_texture_bind_group_key(const DawnSampler* sampler,
-                                            const DawnTexture* texture) {
-    BindGroupKey<1> uniqueKey;
-    {
-        BindGroupKey<1>::Builder builder(&uniqueKey);
-
-        builder[0] = sampler->uniqueID().asUInt();
-        builder[1] = texture->uniqueID().asUInt();
-
-        builder.finish();
-    }
-
-    return uniqueKey;
-}
-}  // namespace
-
+} // namespace
 
 // Wraps a Dawn buffer, and tracks the intrinsic blocks residing in this buffer.
 class DawnResourceProvider::IntrinsicBuffer final {
@@ -214,7 +162,8 @@ public:
 
     ~IntrinsicConstantsManager() {
         auto alwaysTrue = [](IntrinsicBuffer* buffer) { return true; };
-        this->purgeBuffersIf(alwaysTrue);
+        this->purgeBuffersUntilDoneOrFalse(alwaysTrue);
+        this->releasePendingIntrinsicBuffers();
 
         SkASSERT(fIntrinsicBuffersLRU.isEmpty());
     }
@@ -223,22 +172,44 @@ public:
     // buffer.
     BindBufferInfo add(DawnCommandBuffer* cb, UniformDataBlock intrinsicValues);
 
-    void purgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime) {
-        auto bufferNotUsedSince = [purgeTime, this](IntrinsicBuffer* buffer) {
-            // We always keep the current buffer as it is likely to be used again soon.
-            return buffer != fCurrentBuffer && buffer->lastAccessTime() < purgeTime;
+    void purgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime,
+                                    std::optional<StdSteadyClock::time_point> quitPurgingTime) {
+        auto bufferShouldBePurged = [&](IntrinsicBuffer* buffer) {
+            // We always keep the current buffer as it is likely to be used again soon. If we
+            // surpass quitPurgingTime, further buffers should not be purged.
+            return ( !quitPurgingTime.has_value() ||
+                     skgpu::StdSteadyClock::now() < quitPurgingTime.value()) &&
+                   (buffer != fCurrentBuffer && buffer->lastAccessTime() < purgeTime);
         };
-        this->purgeBuffersIf(bufferNotUsedSince);
+        this->purgeBuffersUntilDoneOrFalse(bufferShouldBePurged);
     }
 
-    void freeGpuResources() { this->purgeResourcesNotUsedSince(skgpu::StdSteadyClock::now()); }
+    void releasePendingIntrinsicBuffers() {
+        using Iter = SkTInternalLList<IntrinsicBuffer>::Iter;
+        Iter iter;
+        auto* curr = iter.init(fPendingIntrinsicBuffers, Iter::kHead_IterStart);
+        while (curr != nullptr) {
+            auto* next = iter.next();
+
+            fPendingIntrinsicBuffers.remove(curr);
+            delete curr;
+
+            curr = next;
+        }
+    }
+
+    void freeGpuResources() {
+        this->purgeResourcesNotUsedSince(skgpu::StdSteadyClock::now(),
+                                         /*quitPurgingTime=*/std::nullopt);
+    }
 
 private:
     // The max number of intrinsic buffers to keep around in the cache.
     static constexpr uint32_t kMaxNumBuffers = 16;
 
-    // Traverse the intrinsic buffers and purge the ones that match the 'pred'.
-    template<typename T> void purgeBuffersIf(T pred);
+    // Traverse the intrinsic buffers, purging all the purgeable LRU buffers until either all of
+    // them are purged OR until `pred` returns false.
+    template<typename T> void purgeBuffersUntilDoneOrFalse(T pred);
 
     DawnResourceProvider* const fResourceProvider;
     // The current buffer being filled up, as well as the how much of it has been written to.
@@ -248,6 +219,10 @@ private:
     SkTInternalLList<IntrinsicBuffer> fIntrinsicBuffersLRU;
     // The number of intrinsic buffers currently in the cache.
     uint32_t fNumBuffers = 0;
+
+    // Linked list of instrinsic buffers which have been bumped out of the LRU. Is cleared when the
+    // command buffer is finished.
+    SkTInternalLList<IntrinsicBuffer> fPendingIntrinsicBuffers;
 };
 
 // Find or create a bind buffer info for the given intrinsic values used in the given command
@@ -312,7 +287,7 @@ BindBufferInfo DawnResourceProvider::IntrinsicConstantsManager::add(
         if (fNumBuffers > kMaxNumBuffers) {
             auto* tail = fIntrinsicBuffersLRU.tail();
             fIntrinsicBuffersLRU.remove(tail);
-            delete tail;
+            fPendingIntrinsicBuffers.addToHead(tail);
             fNumBuffers--;
         }
     }
@@ -334,7 +309,8 @@ BindBufferInfo DawnResourceProvider::IntrinsicConstantsManager::add(
     return {fCurrentBuffer->buffer().get(), newOffset, SkTo<uint32_t>(intrinsicValues.size())};
 }
 
-template <typename T> void DawnResourceProvider::IntrinsicConstantsManager::purgeBuffersIf(T pred) {
+template <typename T>
+void DawnResourceProvider::IntrinsicConstantsManager::purgeBuffersUntilDoneOrFalse(T pred) {
     using Iter = SkTInternalLList<IntrinsicBuffer>::Iter;
     Iter iter;
     auto* curr = iter.init(fIntrinsicBuffersLRU, Iter::kHead_IterStart);
@@ -344,6 +320,9 @@ template <typename T> void DawnResourceProvider::IntrinsicConstantsManager::purg
             fIntrinsicBuffersLRU.remove(curr);
             fNumBuffers--;
             delete curr;
+        } else {
+            // If 'pred' returns false, we stop the process of purging buffers.
+            return;
         }
         curr = next;
     }
@@ -397,10 +376,13 @@ void DawnResourceProvider::BlitWithDrawEncoder::EncodeBlit(
     SkASSERT(std::abs(deltaY) < std::numeric_limits<int16_t>::max());
     int32_t baseInstance = (deltaX & 0xffff) | (deltaY << 16);
 
+    // NOTE(b/457887457): need to cast baseInstance to uint32_t explicitly otherwise it would cause
+    // TypeError in emscripten, because baseInstance value could be negative in signed integer
+    // representation.
     renderEncoder.Draw(/*vertexCount=*/3,
                        /*instanceCount=*/ 1,
                        /*firstVertex=*/0,
-                       /*firstInstance=*/baseInstance);
+                       /*firstInstance=*/static_cast<uint32_t>(baseInstance));
 }
 
 // ----------------------------------------------------------------------------
@@ -409,8 +391,6 @@ DawnResourceProvider::DawnResourceProvider(SharedContext* sharedContext,
                                            uint32_t recorderID,
                                            size_t resourceBudget)
         : ResourceProvider(sharedContext, singleOwner, recorderID, resourceBudget)
-        , fUniformBufferBindGroupCache(kMaxNumberOfCachedBufferBindGroups)
-        , fSingleTextureSamplerBindGroups(kMaxNumberOfCachedTextureBindGroups)
         , fSingleOwner(singleOwner) {
     fIntrinsicConstantsManager = std::make_unique<IntrinsicConstantsManager>(this);
 
@@ -421,12 +401,11 @@ DawnResourceProvider::DawnResourceProvider(SharedContext* sharedContext,
 DawnResourceProvider::~DawnResourceProvider() = default;
 
 DawnResourceProvider::BlitWithDrawEncoder DawnResourceProvider::findOrCreateBlitWithDrawEncoder(
-        const RenderPassDesc& renderPassDesc, int srcSampleCount) {
-    // Currently Dawn only supports one sample count > 1. So we can optimize the pipeline key by
-    // specifying whether the source has MSAA or not.
-    SkASSERT(srcSampleCount <= 1 ||
-             srcSampleCount == this->dawnSharedContext()->dawnCaps()->defaultMSAASamplesCount());
-    const bool srcIsMSAA = srcSampleCount > 1;
+        const RenderPassDesc& renderPassDesc, SampleCount srcSampleCount) {
+    // Currently Dawn only supports k1 and k4. So we can optimize the pipeline key by specifying
+    // whether the source has MSAA or not.
+    SkASSERT(srcSampleCount == SampleCount::k1 || srcSampleCount == SampleCount::k4);
+    const bool srcIsMSAA = srcSampleCount > SampleCount::k1;
     const uint32_t pipelineKey = this->dawnSharedContext()->dawnCaps()->getRenderPassDescKeyForPipeline(
             renderPassDesc, srcIsMSAA);
     wgpu::RenderPipeline pipeline = fBlitWithDrawPipelines[pipelineKey];
@@ -477,7 +456,7 @@ DawnResourceProvider::BlitWithDrawEncoder DawnResourceProvider::findOrCreateBlit
             "@fragment\n"
             "fn SampleMSAAFS(input: VertexOutput) -> @location(0) vec4<f32> {"
                 "let coords = getSamplingCoords(input);"
-                "const sampleCount = %d;"
+                "const sampleCount = %u;"
                 "var sum = vec4f(0.0);"
                 "for (var i: u32 = 0; i < sampleCount; i = i + 1) {"
                     "sum += textureLoad(msColorMap, coords, i);"
@@ -486,7 +465,8 @@ DawnResourceProvider::BlitWithDrawEncoder DawnResourceProvider::findOrCreateBlit
             "}";
 
         auto shaderModule = create_shader_module(
-                dawnSharedContext()->device(), SkStringPrintf(kShaderSrc, srcSampleCount).c_str());
+                dawnSharedContext()->device(),
+                SkStringPrintf(kShaderSrc, (unsigned) srcSampleCount).c_str());
 
         pipeline = create_blit_render_pipeline(
                 dawnSharedContext(),
@@ -498,7 +478,7 @@ DawnResourceProvider::BlitWithDrawEncoder DawnResourceProvider::findOrCreateBlit
                 TextureFormatToDawnFormat(renderPassDesc.fColorAttachment.fFormat),
                 /*renderPassDepthStencilFormat=*/
                 TextureFormatToDawnFormat(renderPassDesc.fDepthStencilAttachment.fFormat),
-                /*numSamples=*/renderPassDesc.fColorAttachment.fSampleCount);
+                renderPassDesc.fColorAttachment.fSampleCount);
 
         if (pipeline) {
             fBlitWithDrawPipelines.set(pipelineKey, pipeline);
@@ -508,7 +488,8 @@ DawnResourceProvider::BlitWithDrawEncoder DawnResourceProvider::findOrCreateBlit
     return BlitWithDrawEncoder(std::move(pipeline), srcIsMSAA);
 }
 
-sk_sp<Texture> DawnResourceProvider::onCreateWrappedTexture(const BackendTexture& texture) {
+sk_sp<Texture> DawnResourceProvider::onCreateWrappedTexture(const BackendTexture& texture,
+                                                            std::string_view label) {
     // Convert to smart pointers. wgpu::Texture* constructor will increment the ref count.
     wgpu::Texture dawnTexture         = BackendTextures::GetDawnTexturePtr(texture);
     wgpu::TextureView dawnTextureView = BackendTextures::GetDawnTextureViewPtr(texture);
@@ -522,12 +503,14 @@ sk_sp<Texture> DawnResourceProvider::onCreateWrappedTexture(const BackendTexture
         return DawnTexture::MakeWrapped(this->dawnSharedContext(),
                                         texture.dimensions(),
                                         texture.info(),
-                                        std::move(dawnTexture));
+                                        std::move(dawnTexture),
+                                        label);
     } else {
         return DawnTexture::MakeWrapped(this->dawnSharedContext(),
                                         texture.dimensions(),
                                         texture.info(),
-                                        std::move(dawnTextureView));
+                                        std::move(dawnTextureView),
+                                        label);
     }
 }
 
@@ -537,7 +520,7 @@ sk_sp<DawnTexture> DawnResourceProvider::findOrCreateDiscardableMSAALoadTexture(
 
     // Derive the load texture's info from MSAA texture's info.
     DawnTextureInfo dawnMsaaLoadTextureInfo = TextureInfoPriv::Get<DawnTextureInfo>(msaaInfo);
-    dawnMsaaLoadTextureInfo.fSampleCount = 1;
+    dawnMsaaLoadTextureInfo.fSampleCount = SampleCount::k1;
     dawnMsaaLoadTextureInfo.fUsage |= wgpu::TextureUsage::TextureBinding;
 
 #if !defined(__EMSCRIPTEN__)
@@ -558,36 +541,21 @@ sk_sp<DawnTexture> DawnResourceProvider::findOrCreateDiscardableMSAALoadTexture(
     return sk_sp<DawnTexture>(static_cast<DawnTexture*>(texture.release()));
 }
 
-sk_sp<GraphicsPipeline> DawnResourceProvider::createGraphicsPipeline(
-        const RuntimeEffectDictionary* runtimeDict,
-        const UniqueKey& pipelineKey,
-        const GraphicsPipelineDesc& pipelineDesc,
-        const RenderPassDesc& renderPassDesc,
-        SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags,
-        uint32_t compilationID) {
-    return DawnGraphicsPipeline::Make(this->dawnSharedContext(),
-                                      this,
-                                      runtimeDict,
-                                      pipelineKey,
-                                      pipelineDesc,
-                                      renderPassDesc,
-                                      pipelineCreationFlags,
-                                      compilationID);
-}
-
 sk_sp<ComputePipeline> DawnResourceProvider::createComputePipeline(
         const ComputePipelineDesc& desc) {
     return DawnComputePipeline::Make(this->dawnSharedContext(), desc);
 }
 
-sk_sp<Texture> DawnResourceProvider::createTexture(SkISize dimensions, const TextureInfo& info) {
-    return DawnTexture::Make(this->dawnSharedContext(), dimensions, info);
+sk_sp<Texture> DawnResourceProvider::createTexture(
+        SkISize dimensions, const TextureInfo& info, std::string_view label) {
+    return DawnTexture::Make(this->dawnSharedContext(), dimensions, info, label);
 }
 
 sk_sp<Buffer> DawnResourceProvider::createBuffer(size_t size,
                                                  BufferType type,
-                                                 AccessPattern accessPattern) {
-    return DawnBuffer::Make(this->dawnSharedContext(), size, type, accessPattern);
+                                                 AccessPattern accessPattern,
+                                                 std::string_view label) {
+    return DawnBuffer::Make(this->dawnSharedContext(), size, type, accessPattern, label);
 }
 
 sk_sp<Sampler> DawnResourceProvider::createSampler(const SamplerDesc& samplerDesc) {
@@ -631,96 +599,9 @@ sk_sp<DawnBuffer> DawnResourceProvider::findOrCreateDawnBuffer(size_t size,
                                                                BufferType type,
                                                                AccessPattern accessPattern,
                                                                std::string_view label) {
-    sk_sp<Buffer> buffer = this->findOrCreateBuffer(size, type, accessPattern, std::move(label));
+    sk_sp<Buffer> buffer = this->findOrCreateNonShareableBuffer(size, type, accessPattern, label);
     DawnBuffer* ptr = static_cast<DawnBuffer*>(buffer.release());
     return sk_sp<DawnBuffer>(ptr);
-}
-
-const wgpu::BindGroupLayout& DawnResourceProvider::getOrCreateUniformBuffersBindGroupLayout() {
-    SKGPU_ASSERT_SINGLE_OWNER(fSingleOwner)
-
-    if (fUniformBuffersBindGroupLayout) {
-        return fUniformBuffersBindGroupLayout;
-    }
-
-    std::array<wgpu::BindGroupLayoutEntry, 4> entries;
-    entries[0].binding = DawnGraphicsPipeline::kIntrinsicUniformBufferIndex;
-    entries[0].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-    entries[0].buffer.type = wgpu::BufferBindingType::Uniform;
-    entries[0].buffer.hasDynamicOffset = true;
-    entries[0].buffer.minBindingSize = 0;
-
-    entries[1].binding = DawnGraphicsPipeline::kRenderStepUniformBufferIndex;
-    entries[1].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-    entries[1].buffer.type = fSharedContext->caps()->storageBufferSupport()
-                                     ? wgpu::BufferBindingType::ReadOnlyStorage
-                                     : wgpu::BufferBindingType::Uniform;
-    entries[1].buffer.hasDynamicOffset = true;
-    entries[1].buffer.minBindingSize = 0;
-
-    entries[2].binding = DawnGraphicsPipeline::kPaintUniformBufferIndex;
-    entries[2].visibility = wgpu::ShaderStage::Vertex | wgpu::ShaderStage::Fragment;
-    entries[2].buffer.type = fSharedContext->caps()->storageBufferSupport()
-                                     ? wgpu::BufferBindingType::ReadOnlyStorage
-                                     : wgpu::BufferBindingType::Uniform;
-    entries[2].buffer.hasDynamicOffset = true;
-    entries[2].buffer.minBindingSize = 0;
-
-    // Gradient buffer will only be used when storage buffers are preferred, else large
-    // gradients use a texture fallback, set binding type as a uniform when not in use to
-    // satisfy any binding type restricions for non-supported ssbo devices.
-    entries[3].binding = DawnGraphicsPipeline::kGradientBufferIndex;
-    entries[3].visibility = wgpu::ShaderStage::Fragment;
-    entries[3].buffer.type = fSharedContext->caps()->storageBufferSupport()
-                                     ? wgpu::BufferBindingType::ReadOnlyStorage
-                                     : wgpu::BufferBindingType::Uniform;
-    entries[3].buffer.hasDynamicOffset = true;
-    entries[3].buffer.minBindingSize = 0;
-
-    wgpu::BindGroupLayoutDescriptor groupLayoutDesc;
-    if (fSharedContext->caps()->setBackendLabels()) {
-        groupLayoutDesc.label = "Uniform buffers bind group layout";
-    }
-
-    groupLayoutDesc.entryCount = entries.size();
-    groupLayoutDesc.entries = entries.data();
-    fUniformBuffersBindGroupLayout =
-            this->dawnSharedContext()->device().CreateBindGroupLayout(&groupLayoutDesc);
-
-    return fUniformBuffersBindGroupLayout;
-}
-
-const wgpu::BindGroupLayout&
-DawnResourceProvider::getOrCreateSingleTextureSamplerBindGroupLayout() {
-    SKGPU_ASSERT_SINGLE_OWNER(fSingleOwner)
-
-    if (fSingleTextureSamplerBindGroupLayout) {
-        return fSingleTextureSamplerBindGroupLayout;
-    }
-
-    std::array<wgpu::BindGroupLayoutEntry, 2> entries;
-
-    entries[0].binding = 0;
-    entries[0].visibility = wgpu::ShaderStage::Fragment;
-    entries[0].sampler.type = wgpu::SamplerBindingType::Filtering;
-
-    entries[1].binding = 1;
-    entries[1].visibility = wgpu::ShaderStage::Fragment;
-    entries[1].texture.sampleType = wgpu::TextureSampleType::Float;
-    entries[1].texture.viewDimension = wgpu::TextureViewDimension::e2D;
-    entries[1].texture.multisampled = false;
-
-    wgpu::BindGroupLayoutDescriptor groupLayoutDesc;
-    if (fSharedContext->caps()->setBackendLabels()) {
-        groupLayoutDesc.label = "Single texture + sampler bind group layout";
-    }
-
-    groupLayoutDesc.entryCount = entries.size();
-    groupLayoutDesc.entries = entries.data();
-    fSingleTextureSamplerBindGroupLayout =
-            this->dawnSharedContext()->device().CreateBindGroupLayout(&groupLayoutDesc);
-
-    return fSingleTextureSamplerBindGroupLayout;
 }
 
 const wgpu::Buffer& DawnResourceProvider::getOrCreateNullBuffer() {
@@ -741,101 +622,111 @@ const wgpu::Buffer& DawnResourceProvider::getOrCreateNullBuffer() {
     return fNullBuffer;
 }
 
-const wgpu::BindGroup& DawnResourceProvider::findOrCreateUniformBuffersBindGroup(
-        const std::array<std::pair<const DawnBuffer*, uint32_t>, kNumUniformEntries>&
-                boundBuffersAndSizes) {
-    SKGPU_ASSERT_SINGLE_OWNER(fSingleOwner)
-
-    auto key = make_ubo_bind_group_key(boundBuffersAndSizes);
-    auto* existingBindGroup = fUniformBufferBindGroupCache.find(key);
-    if (existingBindGroup) {
-        // cache hit.
-        return *existingBindGroup;
-    }
-
-    // Translate to wgpu::BindGroupDescriptor
-    std::array<wgpu::BindGroupEntry, kNumUniformEntries> entries;
-
-    constexpr uint32_t kBindingIndices[] = {
-        DawnGraphicsPipeline::kIntrinsicUniformBufferIndex,
-        DawnGraphicsPipeline::kRenderStepUniformBufferIndex,
-        DawnGraphicsPipeline::kPaintUniformBufferIndex,
-        DawnGraphicsPipeline::kGradientBufferIndex,
-    };
-
-    for (uint32_t i = 0; i < boundBuffersAndSizes.size(); ++i) {
-        const DawnBuffer* boundBuffer = boundBuffersAndSizes[i].first;
-        const uint32_t bindingSize = boundBuffersAndSizes[i].second;
-
-        entries[i].binding = kBindingIndices[i];
-        entries[i].offset = 0;
-        if (boundBuffer) {
-            entries[i].buffer = boundBuffer->dawnBuffer();
-            entries[i].size = SkAlignTo(bindingSize, kBufferBindingSizeAlignment);
-        } else {
-            entries[i].buffer = this->getOrCreateNullBuffer();
-            entries[i].size = wgpu::kWholeSize;
-        }
-    }
+wgpu::BindGroup DawnResourceProvider::createBindGroup(SkSpan<wgpu::BindGroupEntry> entries,
+                                                      const wgpu::BindGroupLayout layout) {
+    const auto& device = this->dawnSharedContext()->device();
 
     wgpu::BindGroupDescriptor desc;
-    desc.layout = this->getOrCreateUniformBuffersBindGroupLayout();
+    desc.layout = layout;
     desc.entryCount = entries.size();
     desc.entries = entries.data();
 
-    const auto& device = this->dawnSharedContext()->device();
-    auto bindGroup = device.CreateBindGroup(&desc);
-
-    return *fUniformBufferBindGroupCache.insert(key, bindGroup);
+    return device.CreateBindGroup(&desc);
 }
 
-const wgpu::BindGroup& DawnResourceProvider::findOrCreateSingleTextureSamplerBindGroup(
+wgpu::BindGroup DawnResourceProvider::findOrCreateSingleUniformBindGroup(
+        const BindBufferInfo& bufferInfo) {
+    SKGPU_ASSERT_SINGLE_OWNER(fSingleOwner)
+    // We should only hit the single-uniform case if push constant usage is supported for intrinsic
+    // constants.
+    SkASSERT(this->dawnSharedContext()->dawnCaps()->
+            resourceBindingRequirements().fUsePushConstantsForIntrinsicConstants);
+
+    auto buffer = static_cast<const DawnBuffer*>(bufferInfo.fBuffer);
+
+    if (auto cachedBindGroup = buffer->getCachedSingleBufferBindGroup(bufferInfo.fSize)) {
+        return *cachedBindGroup;
+    }
+
+    // We should be able to assume that if we only have one uniform that it is the combined uniform
+    // buffer. Construct a list of bind group entries to represent the single combined uniform
+    // buffer case.
+    wgpu::BindGroupEntry intrinsicConstantNullEntry;
+    intrinsicConstantNullEntry.binding = DawnGraphicsPipeline::kIntrinsicUniformBufferIndex;
+    intrinsicConstantNullEntry.buffer  = this->getOrCreateNullBuffer();
+
+    wgpu::BindGroupEntry combinedUniformEntry;
+    combinedUniformEntry.binding = DawnGraphicsPipeline::kCombinedUniformIndex;
+    combinedUniformEntry.offset  = 0; // Use dynamic offsets; ignore bufferInfo.fOffset
+    combinedUniformEntry.buffer  = buffer->dawnBuffer();
+    combinedUniformEntry.size    = SkAlignTo(bufferInfo.fSize, kBufferBindingSizeAlignment);
+
+    wgpu::BindGroupEntry gradientBufferNullEntry;
+    gradientBufferNullEntry.binding = DawnGraphicsPipeline::kGradientBufferIndex;
+    gradientBufferNullEntry.buffer  = this->getOrCreateNullBuffer();
+
+    std::array<wgpu::BindGroupEntry, kNumUniformEntries> entries = {
+        intrinsicConstantNullEntry,
+        combinedUniformEntry,
+        gradientBufferNullEntry
+    };
+
+    wgpu::BindGroup bindGroup = this->createBindGroup(
+            entries, this->dawnSharedContext()->getUniformBuffersBindGroupLayout());
+
+    buffer->addCachedSingleBufferBindGroup(bindGroup, bufferInfo.fSize);
+
+    return bindGroup;
+}
+
+
+wgpu::BindGroup DawnResourceProvider::findOrCreateSingleTextureSamplerBindGroup(
         const DawnSampler* sampler, const DawnTexture* texture) {
     SKGPU_ASSERT_SINGLE_OWNER(fSingleOwner)
 
-    auto key = make_texture_bind_group_key(sampler, texture);
-    auto* existingBindGroup = fSingleTextureSamplerBindGroups.find(key);
-    if (existingBindGroup) {
-        // cache hit.
-        return *existingBindGroup;
+    // First check if we already have a cached bind group we can use.
+    auto cachedBindGroup = texture->getCachedSingleTextureBindGroup(sampler);
+    if (cachedBindGroup) {
+        return *cachedBindGroup;
     }
 
+    // Otherwise, create one and store it on the Texture for potential future reuse.
     std::array<wgpu::BindGroupEntry, 2> entries;
-
     entries[0].binding = 0;
     entries[0].sampler = sampler->dawnSampler();
     entries[1].binding = 1;
     entries[1].textureView = texture->sampleTextureView();
 
-    wgpu::BindGroupDescriptor desc;
-    desc.layout = getOrCreateSingleTextureSamplerBindGroupLayout();
-    desc.entryCount = entries.size();
-    desc.entries = entries.data();
+    wgpu::BindGroup bindGroup = this->createBindGroup(
+            entries, this->dawnSharedContext()->getSingleTextureSamplerBindGroupLayout());
+    texture->addCachedSingleTextureBindGroup(bindGroup, sampler);
 
-    const auto& device = this->dawnSharedContext()->device();
-    auto bindGroup = device.CreateBindGroup(&desc);
-
-    return *fSingleTextureSamplerBindGroups.insert(key, bindGroup);
+    return bindGroup;
 }
 
 void DawnResourceProvider::onFreeGpuResources() {
     SKGPU_ASSERT_SINGLE_OWNER(fSingleOwner)
 
     fIntrinsicConstantsManager->freeGpuResources();
-    // The wgpu::Textures and wgpu::Buffers held by the BindGroups should be explicitly destroyed
-    // when the DawnTexture and DawnBuffer is destroyed, but removing the bind groups themselves
-    // helps reduce CPU memory periodically.
-    fSingleTextureSamplerBindGroups.reset();
-    fUniformBufferBindGroupCache.reset();
 }
 
-void DawnResourceProvider::onPurgeResourcesNotUsedSince(StdSteadyClock::time_point purgeTime) {
-    fIntrinsicConstantsManager->purgeResourcesNotUsedSince(purgeTime);
+void DawnResourceProvider::onPurgeResourcesNotUsedSince(
+        StdSteadyClock::time_point purgeTime,
+        std::optional<StdSteadyClock::time_point> quitPurgingTime) {
+    fIntrinsicConstantsManager->purgeResourcesNotUsedSince(purgeTime, quitPurgingTime);
 }
 
 BindBufferInfo DawnResourceProvider::findOrCreateIntrinsicBindBufferInfo(
         DawnCommandBuffer* cb, UniformDataBlock intrinsicValues) {
     return fIntrinsicConstantsManager->add(cb, intrinsicValues);
 }
+
+void DawnResourceProvider::releasePendingIntrinsicBuffers() {
+    fIntrinsicConstantsManager->releasePendingIntrinsicBuffers();
+}
+
+DawnThreadSafeResourceProvider::DawnThreadSafeResourceProvider(
+        std::unique_ptr<ResourceProvider> resourceProvider)
+    : ThreadSafeResourceProvider(std::move(resourceProvider)) {}
 
 } // namespace skgpu::graphite

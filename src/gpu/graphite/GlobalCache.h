@@ -9,7 +9,9 @@
 #define skgpu_graphite_GlobalCache_DEFINED
 
 #include "include/core/SkRefCnt.h"
+#include "include/gpu/graphite/ContextOptions.h"
 #include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTDArray.h"
 #include "src/base/SkSpinlock.h"
 #include "src/core/SkLRUCache.h"
 #include "src/gpu/ResourceKey.h"
@@ -58,13 +60,8 @@ public:
     // Associate the given pipeline with the key. If the key has already had a separate pipeline
     // associated with the key, that pipeline is returned and the passed-in pipeline is discarded.
     // Otherwise, the passed-in pipeline is held by the GlobalCache and also returned back.
-    sk_sp<GraphicsPipeline> addGraphicsPipeline(const UniqueKey&,
-                                                sk_sp<GraphicsPipeline>) SK_EXCLUDES(fSpinLock);
-    // Remove the GraphicsPipeline from the cache, if possible. This does nothing if the pipeline
-    // is not held in the cache. This removes based on actual pipeline object, not by key. When
-    // pipeline compilation has transient failures, it is possible for multiple GraphicsPipelines to
-    // be created that have the same key.
-    void removeGraphicsPipeline(const GraphicsPipeline*) SK_EXCLUDES(fSpinLock);
+    std::pair<sk_sp<GraphicsPipeline>, bool> addGraphicsPipeline(
+            const UniqueKey&, sk_sp<GraphicsPipeline>) SK_EXCLUDES(fSpinLock);
 
     void purgePipelinesNotUsedSince(
             StdSteadyClock::time_point purgeTime) SK_EXCLUDES(fSpinLock);
@@ -80,6 +77,10 @@ public:
             SK_EXCLUDES(fSpinLock);
     uint16_t getEpoch() const SK_EXCLUDES(fSpinLock);
     void forceNextEpochOverflow() SK_EXCLUDES(fSpinLock);
+#endif
+
+#if defined(SK_DEBUG)
+    bool isResourceTracked(const Resource* resource) const;
 #endif
 
     struct PipelineStats {
@@ -113,13 +114,20 @@ public:
     // or reference tracking.
     void addStaticResource(sk_sp<Resource>) SK_EXCLUDES(fSpinLock);
 
-    using PipelineCallbackContext = void*;
-    using PipelineCallback = void (*)(PipelineCallbackContext context, sk_sp<SkData> pipelineData);
-    void setPipelineCallback(PipelineCallback, PipelineCallbackContext) SK_EXCLUDES(fSpinLock);
+    // Note: we change the names here to better reflect the internal view of the Callbacks
+    using PipelineCallbackContext = ContextOptions::PipelineCallbackContext;
+    using PipelineCallback = ContextOptions::PipelineCachingCallback;
+    using DeprecatedPipelineCallback = ContextOptions::PipelineCallback;
 
-    void invokePipelineCallback(SharedContext*,
-                                const GraphicsPipelineDesc&,
-                                const RenderPassDesc&);
+    void setPipelineCallback(PipelineCallbackContext,
+                             PipelineCallback,
+                             DeprecatedPipelineCallback);
+
+    bool hasPipelineCallback() const { return fPipelineCallback || fDeprecatedPipelineCallback; }
+
+    void invokePipelineCallback(ContextOptions::PipelineCacheOp,
+                                const GraphicsPipeline*,
+                                sk_sp<SkData> serializedKey = nullptr);
 
     // Returns a cached Sampler matching the sampler description, assuming that `desc` is a dynamic
     // sampler and does not have any immutable sampler information. The number of dynamic samplers
@@ -135,12 +143,19 @@ public:
 
     bool initializeDynamicSamplers(ResourceProvider*, const Caps*) SK_EXCLUDES(fSpinLock);
 
+#if defined(SK_ENABLE_SPARSE_STRIPS)
+    // Retrieve the static MSAA 8x mask lookup table.
+    const SkTDArray<uint8_t>& getMSAA8MaskLUT() const {
+        return fMSAAMaskLUT;
+    }
+#endif
+
 #if defined(GPU_TEST_UTILS)
     struct StaticVertexCopyRanges {
         uint32_t fOffset;
-        size_t fUnalignedSize;
-        size_t fSize;
-        size_t fRequiredAlignment;
+        uint32_t fUnalignedSize;
+        uint32_t fSize;
+        uint32_t fRequiredAlignment;
     };
     void testingOnly_SetStaticVertexInfo(skia_private::TArray<StaticVertexCopyRanges>,
                                          const Buffer*) SK_EXCLUDES(fSpinLock);
@@ -150,6 +165,12 @@ public:
 
 private:
     static constexpr int kNumDynamicSamplers = 1 << SamplerDesc::kImmutableSamplerInfoShift;
+
+    // Remove the GraphicsPipeline from the cache, if possible. This does nothing if the pipeline
+    // is not held in the cache. This removes based on actual pipeline object, not by key. When
+    // pipeline compilation has transient failures, it is possible for multiple GraphicsPipelines to
+    // be created that have the same key.
+    void removeGraphicsPipeline(const GraphicsPipeline*) SK_REQUIRES(fSpinLock);
 
     struct KeyHash {
         uint32_t operator()(const UniqueKey& key) const { return key.hash(); }
@@ -176,8 +197,10 @@ private:
 
     skia_private::TArray<sk_sp<Resource>> fStaticResource SK_GUARDED_BY(fSpinLock);
 
-    PipelineCallback fPipelineCallback SK_GUARDED_BY(fSpinLock) = nullptr;
-    PipelineCallbackContext fPipelineCallbackContext SK_GUARDED_BY(fSpinLock) = nullptr;
+    PipelineCallbackContext fPipelineCallbackContext = nullptr;
+
+    PipelineCallback fPipelineCallback = nullptr;
+    DeprecatedPipelineCallback fDeprecatedPipelineCallback = nullptr;
 
     PipelineStats fStats SK_GUARDED_BY(fSpinLock);
 
@@ -190,6 +213,11 @@ private:
     // of tile modes and sampling options. The array is indexed by a bitmask generated from these
     // properties. The actual Sampler objects are owned by `fStaticResource`.
     std::array<const Sampler*, kNumDynamicSamplers> fDynamicSamplers SK_GUARDED_BY(fSpinLock);
+
+#if defined(SK_ENABLE_SPARSE_STRIPS)
+    // Static MSAA mask lookup table.
+    SkTDArray<uint8_t> fMSAAMaskLUT;
+#endif
 
 #if defined(GPU_TEST_UTILS)
     skia_private::TArray<StaticVertexCopyRanges> fStaticVertexInfo SK_GUARDED_BY(fSpinLock);

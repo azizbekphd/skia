@@ -12,10 +12,11 @@
 #include "include/core/SkExecutor.h"
 #include "include/core/SkImage.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPathBuilder.h"
 #include "include/core/SkPixmap.h"
 #include "include/core/SkStream.h"
 #include "include/docs/SkPDFJpegHelpers.h"
-#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkGradient.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkRandom.h"
 #include "src/core/SkAutoPixmapStorage.h"
@@ -136,7 +137,7 @@ protected:
     void onDelayedSetup() override {
         sk_sp<SkImage> img(ToolUtils::GetResourceAsImage("images/mandrill_512_q075.jpg"));
         if (!img) { return; }
-        sk_sp<SkData> encoded = img->refEncodedData();
+        auto encoded = img->refEncodedData();
         SkASSERT(encoded);
         if (!encoded) { return; }
         fImage = img;
@@ -210,13 +211,11 @@ struct PDFShaderBench : public Benchmark {
     bool isSuitableFor(Backend b) final { return b == Backend::kNonRendering; }
     void onDelayedSetup() final {
         const SkPoint pts[2] = {{0.0f, 0.0f}, {100.0f, 100.0f}};
-        const SkColor colors[] = {
-            SK_ColorRED, SK_ColorGREEN, SK_ColorBLUE,
-            SK_ColorWHITE, SK_ColorBLACK,
+        const SkColor4f colors[] = {
+            SkColors::kRed, SkColors::kGreen, SkColors::kBlue,
+            SkColors::kWhite, SkColors::kBlack,
         };
-        fShader = SkGradientShader::MakeLinear(
-                pts, colors, nullptr, std::size(colors),
-                SkTileMode::kClamp);
+        fShader = SkShaders::LinearGradient(pts, {{colors, {}, SkTileMode::kClamp}, {}});
     }
     void onDraw(int loops, SkCanvas*) final {
         SkASSERT(fShader);
@@ -268,7 +267,7 @@ struct PDFClipPathBenchmark : public Benchmark {
                 tmp.drawCircle(128, 128, (float)r, paint);
             }
         }
-        fPath.reset();
+        SkPathBuilder builder;
         for (int y = 0; y < 256; ++y) {
             SkColor current = bitmap.getColor(0, y);
             int start = 0;
@@ -280,14 +279,15 @@ struct PDFClipPathBenchmark : public Benchmark {
                 if (color == SK_ColorBLACK) {
                     start = x;
                 } else {
-                    fPath.addRect(SkRect::Make(SkIRect{start, y, x, y + 1}));
+                    builder.addRect(SkRect::Make(SkIRect{start, y, x, y + 1}));
                 }
                 current = color;
             }
             if (current == SK_ColorBLACK) {
-                fPath.addRect(SkRect::Make(SkIRect{start, y, 256, y + 1}));
+                builder.addRect(SkRect::Make(SkIRect{start, y, 256, y + 1}));
             }
         }
+        fPath = builder.detach();
     }
     const char* onGetName() override { return "PDFClipPath"; }
     bool isSuitableFor(Backend backend) override {

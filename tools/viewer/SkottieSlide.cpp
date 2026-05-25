@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google Inc.
+ * Copyright 2017 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -18,9 +18,11 @@
 #include "modules/skottie/include/Skottie.h"
 #include "modules/skottie/include/SkottieProperty.h"
 #include "modules/skottie/include/SlotManager.h"
+#include "modules/skottie/include/TextShaper.h"
 #include "modules/skottie/utils/SkottieUtils.h"
 #include "modules/skottie/utils/TextEditor.h"
 #include "modules/skresources/include/SkResources.h"
+#include "modules/skshaper/utils/FactoryHelpers.h"
 #include "src/base/SkTime.h"
 #include "src/core/SkOSFile.h"
 #include "src/utils/SkOSPath.h"
@@ -168,6 +170,21 @@ private:
     const sk_sp<PropertyObserver>                             fDelegate;
     std::vector<std::unique_ptr<skottie::TextPropertyHandle>> fTextProps;
 };
+
+sk_sp<SkShapers::Factory> make_shapers_factory(bool prefer_coretext) {
+#if defined(SK_SHAPER_CORETEXT_AVAILABLE)
+    if (prefer_coretext) {
+        return sk_make_sp<SkShapers::CoreTextFactory>(SkShapers::CT::LineBreakMode::kStrict);
+    }
+#endif
+#if defined(SK_SHAPER_UNICODE_AVAILABLE)
+    return sk_make_sp<SkShapers::HarfbuzzFactory>(
+        skottie::MakeStrictLinebreakUnicode(
+            SkShapers::BestAvailableUnicode()));
+#else
+    return nullptr;
+#endif
+}
 
 } // namespace
 
@@ -539,7 +556,8 @@ void SkottieSlide::init() {
            .setFontManager(ToolUtils::TestFontMgr())
            .setPrecompInterceptor(std::move(precomp_interceptor))
            .setResourceProvider(resource_provider)
-           .setPropertyObserver(text_tracker);
+           .setPropertyObserver(text_tracker)
+           .setTextShapingFactory(make_shapers_factory(fPreferCoretext));
 
     fAnimation = builder.makeFromFile(fPath.c_str());
     fAnimationStats = builder.getStats();
@@ -550,6 +568,19 @@ void SkottieSlide::init() {
             fSlotManagerInterface =
                 std::make_unique<SlotManagerInterface>(builder.getSlotManager(), resource_provider);
         }
+
+        auto li = builder.getLayerInfo();
+
+        for (const auto& layer : li) {
+            SkDebugf(
+                "Layer: Name: \"%s\" | Size: %.2fx%.2f | In/Out: [%.2f, %.2f]\n",
+                layer.fName.c_str(),
+                layer.fSize.width(),
+                layer.fSize.height(),
+                layer.fInPoint,
+                layer.fOutPoint
+            );
+    }
 
         fSlotManagerInterface->initializeSlotManagerUI();
 
@@ -680,6 +711,10 @@ bool SkottieSlide::onChar(SkUnichar c) {
     }
 
     switch (c) {
+    case 'C':
+        fPreferCoretext = !fPreferCoretext;
+        this->load(fWinSize.width(), fWinSize.height());
+        return true;
     case 'I':
         fShowAnimationStats = !fShowAnimationStats;
         return true;

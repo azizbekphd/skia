@@ -33,7 +33,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "include/core/SkVertices.h"
-#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkGradient.h"
 #include "include/private/base/SkTemplates.h"
 #include "src/base/SkAutoMalloc.h"
 #include "src/core/SkFontPriv.h"
@@ -134,7 +134,7 @@ static void draw_text_on_path(SkCanvas* canvas, const void* text, size_t length,
                               float baseline_offset) {
     SkPathMeasure meas(path, false);
 
-    int count = font.countText(text, length, SkTextEncoding::kUTF8);
+    size_t count = font.countText(text, length, SkTextEncoding::kUTF8);
     size_t size = count * (sizeof(SkRSXform) + sizeof(SkScalar));
     SkAutoSMalloc<512> storage(size);
     SkRSXform* xform = (SkRSXform*)storage.get();
@@ -150,7 +150,7 @@ static void draw_text_on_path(SkCanvas* canvas, const void* text, size_t length,
     font.textToGlyphs(text, length, SkTextEncoding::kUTF8, glyphs);
     font.getWidths(glyphs, {widths, count});
 
-    for (int i = 0; i < count; ++i) {
+    for (size_t i = 0; i < count; ++i) {
         // we want to position each character on the center of its advance
         const SkScalar offset = SkScalarHalf(widths[i]);
         SkPoint pos;
@@ -178,9 +178,9 @@ static void draw_text_on_path(SkCanvas* canvas, const void* text, size_t length,
 }
 
 static sk_sp<SkShader> make_shader() {
-    SkPoint pts[2] = {{0, 0}, {220, 0}};
-    SkColor colors[2] = {SK_ColorRED, SK_ColorBLUE};
-    return SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkTileMode::kMirror);
+    const SkPoint pts[2] = {{0, 0}, {220, 0}};
+    const SkColor4f colors[2] = {SkColors::kRed, SkColors::kBlue};
+    return SkShaders::LinearGradient(pts, {{colors, {}, SkTileMode::kMirror}, {}});
 }
 
 static void drawTextPath(SkCanvas* canvas, bool doStroke) {
@@ -213,8 +213,7 @@ static void drawTextPath(SkCanvas* canvas, bool doStroke) {
         SkPathDirection::kCW, SkPathDirection::kCCW,
     };
     for (auto d : dirs) {
-        path.reset();
-        path.addOval(SkRect::MakeXYWH(160, 160, 540, 540), d);
+        path = SkPath::Oval(SkRect::MakeXYWH(160, 160, 540, 540), d);
         draw_text_on_path(canvas, text0, N, pos, path, font, paint, baseline_offset);
     }
 

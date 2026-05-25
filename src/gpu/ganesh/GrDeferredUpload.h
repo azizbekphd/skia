@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google Inc.
+ * Copyright 2017 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -8,7 +8,7 @@
 #ifndef GrDeferredUpload_DEFINED
 #define GrDeferredUpload_DEFINED
 
-#include "src/gpu/AtlasTypes.h"
+#include "src/gpu/ganesh/GrAtlasTypes.h"
 
 #include <cstddef>
 #include <functional>
@@ -62,12 +62,12 @@ public:
     virtual const skgpu::TokenTracker* tokenTracker() = 0;
 
     /** Returns the token of the draw that this upload will occur before. */
-    virtual skgpu::AtlasToken addInlineUpload(GrDeferredTextureUploadFn&&) = 0;
+    virtual skgpu::Token addInlineUpload(GrDeferredTextureUploadFn&&) = 0;
 
     /** Returns the token of the draw that this upload will occur before. Since ASAP uploads
         are done first during a flush, this will be the first token since the most recent
         flush. */
-    virtual skgpu::AtlasToken addASAPUpload(GrDeferredTextureUploadFn&& upload) = 0;
+    virtual skgpu::Token addASAPUpload(GrDeferredTextureUploadFn&& upload) = 0;
 };
 
 #endif

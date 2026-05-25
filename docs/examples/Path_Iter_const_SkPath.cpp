@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_Iter_const_SkPath, 256, 256, true, 0) {
@@ -18,8 +18,7 @@ void draw(SkCanvas* canvas) {
         }
         SkDebugf("\n");
     };
-    SkPath path;
-    path.quadTo(10, 20, 30, 40);
+    SkPath path = SkPathBuilder().quadTo(10, 20, 30, 40).detach();
     SkPath::Iter openIter(path, false);
     debugster("open", openIter);
     SkPath::Iter closedIter(path, true);

@@ -319,7 +319,7 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
             break;
         case SK_PICT_FACTORY_TAG: {
             if (!stream->readU32(&size)) { return false; }
-            if (StreamRemainingLengthIsBelow(stream, size)) {
+            if (SkStreamPriv::RemainingLengthIsBelow(stream, size)) {
                 return false;
             }
             fFactoryPlayback = std::make_unique<SkFactoryPlayback>(size);
@@ -327,7 +327,7 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
                 SkString str;
                 size_t len;
                 if (!stream->readPackedUInt(&len)) { return false; }
-                if (StreamRemainingLengthIsBelow(stream, len)) {
+                if (SkStreamPriv::RemainingLengthIsBelow(stream, len)) {
                     return false;
                 }
                 str.resize(len);
@@ -338,7 +338,7 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
             }
         } break;
         case SK_PICT_TYPEFACE_TAG: {
-            if (StreamRemainingLengthIsBelow(stream, size)) {
+            if (SkStreamPriv::RemainingLengthIsBelow(stream, size)) {
                 return false;
             }
             fTFPlayback.setCount(size);
@@ -347,10 +347,9 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
                     return false;
                 }
                 sk_sp<SkTypeface> tf;
-                if (procs.fTypefaceProc) {
-                    tf = procs.fTypefaceProc(&stream, sizeof(stream), procs.fTypefaceCtx);
-                }
-                else {
+                if (procs.fTypefaceStreamProc) {
+                    tf = procs.fTypefaceStreamProc(*stream, procs.fTypefaceCtx);
+                } else {
                     tf = SkTypeface::MakeDeserialize(stream, nullptr);
                 }
                 if (!tf) {    // failed to deserialize
@@ -363,7 +362,7 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
         } break;
         case SK_PICT_PICTURE_TAG: {
             SkASSERT(fPictures.empty());
-            if (StreamRemainingLengthIsBelow(stream, size)) {
+            if (SkStreamPriv::RemainingLengthIsBelow(stream, size)) {
                 return false;
             }
             fPictures.reserve_exact(SkToInt(size));
@@ -378,7 +377,7 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
             }
         } break;
         case SK_PICT_BUFFER_SIZE_TAG: {
-            if (StreamRemainingLengthIsBelow(stream, size)) {
+            if (SkStreamPriv::RemainingLengthIsBelow(stream, size)) {
                 return false;
             }
             SkAutoMalloc storage(size);
@@ -388,6 +387,10 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
 
             SkReadBuffer buffer(storage.get(), size);
             buffer.setVersion(fInfo.getVersion());
+            // A Picture stream can contain a ReadBuffer which can, in turn, contain more
+            // pictures (but not more streams or buffers), so we need to remove 1 from the
+            // current recursion limit to count *this* picture before passing it on.
+            buffer.setRecursionLimit(recursionLimit - 1);
 
             if (!fFactoryPlayback) {
                 return false;
@@ -413,7 +416,7 @@ bool SkPictureData::parseStreamTag(SkStream* stream,
             }
         } break;
     }
-    return true;    // success
+    return true;  // success
 }
 
 static sk_sp<SkImage> create_image_from_buffer(SkReadBuffer& buffer) {
@@ -424,10 +427,13 @@ static sk_sp<SkDrawable> create_drawable_from_buffer(SkReadBuffer& buffer) {
     return sk_sp<SkDrawable>((SkDrawable*)buffer.readFlattenable(SkFlattenable::kSkDrawable_Type));
 }
 
+template <typename U> using FactoryFn = sk_sp<U> (*)(SkReadBuffer&);
 // We need two types 'cause SkDrawable is const-variant.
 template <typename T, typename U>
-bool new_array_from_buffer(SkReadBuffer& buffer, uint32_t inCount,
-                           TArray<sk_sp<T>>& array, sk_sp<U> (*factory)(SkReadBuffer&)) {
+bool new_array_from_buffer(SkReadBuffer& buffer,
+                           uint32_t inCount,
+                           TArray<sk_sp<T>>& array,
+                           FactoryFn<U> factory) {
     if (!buffer.validate(array.empty() && SkTFitsIn<int>(inCount))) {
         return false;
     }
@@ -474,6 +480,8 @@ void SkPictureData::parseBufferTag(SkReadBuffer& buffer, uint32_t tag, uint32_t 
                     if (auto path = buffer.readPath()) {
                         fPaths.push_back(std::move(*path));
                     } else {
+                        // readPath should invalidate the buffer if we didn't get a path back.
+                        SkASSERT(!buffer.isValid());
                         return;
                     }
                 }
@@ -505,10 +513,14 @@ void SkPictureData::parseBufferTag(SkReadBuffer& buffer, uint32_t tag, uint32_t 
             fOpData = std::move(data);
         } break;
         case SK_PICT_PICTURE_TAG:
+            buffer.downLevel();
             new_array_from_buffer(buffer, size, fPictures, SkPicturePriv::MakeFromBuffer);
+            buffer.upLevel();
             break;
         case SK_PICT_DRAWABLE_TAG:
+            buffer.downLevel();  // Drawables could contain pictures in theory
             new_array_from_buffer(buffer, size, fDrawables, create_drawable_from_buffer);
+            buffer.upLevel();
             break;
         default:
             buffer.validate(false); // The tag was invalid.
@@ -521,6 +533,9 @@ SkPictureData* SkPictureData::CreateFromStream(SkStream* stream,
                                                const SkDeserialProcs& procs,
                                                SkTypefacePlayback* topLevelTFPlayback,
                                                int recursionLimit) {
+    if (recursionLimit <= 0) {
+        return nullptr;
+    }
     std::unique_ptr<SkPictureData> data(new SkPictureData(info));
     if (!topLevelTFPlayback) {
         topLevelTFPlayback = &data->fTFPlayback;
@@ -534,6 +549,9 @@ SkPictureData* SkPictureData::CreateFromStream(SkStream* stream,
 
 SkPictureData* SkPictureData::CreateFromBuffer(SkReadBuffer& buffer,
                                                const SkPictInfo& info) {
+    if (!buffer.isValid()) {
+        return nullptr;
+    }
     std::unique_ptr<SkPictureData> data(new SkPictureData(info));
     buffer.setVersion(info.getVersion());
 

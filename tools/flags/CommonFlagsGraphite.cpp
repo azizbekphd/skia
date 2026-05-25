@@ -11,8 +11,8 @@
 #include "tools/graphite/TestOptions.h"
 
 // Defined in CommonFlagsConfig
-DECLARE_int(gpuThreads);
-DECLARE_int(internalSamples);
+DECLARE_int(gpuThreads)
+DECLARE_int(internalSamples)
 
 namespace CommonFlags {
 #if defined(SK_DAWN)
@@ -24,6 +24,9 @@ static DEFINE_bool(useWGPUTextureView, false, "Run Graphite w/ a wrapped WGPU te
 #endif // SK_DAWN
 
 DEFINE_int(internalMSAATileSize, 0, "Run Graphite w/ limited MSAA texture's size");
+DEFINE_int(minMSAAPathSize, -1,
+           "Graphite uses raster atlas for paths smaller than this, or default value if negative");
+DEFINE_bool(useDrawListLayer, false, "Enable experimental layer-based draw ordering.");
 
 void SetTestOptions(skiatest::graphite::TestOptions* testOptions) {
     static std::unique_ptr<SkExecutor> gGpuExecutor =
@@ -33,12 +36,20 @@ void SetTestOptions(skiatest::graphite::TestOptions* testOptions) {
     testOptions->fContextOptions.fExecutor = gGpuExecutor.get();
 
     if (FLAGS_internalSamples >= 0) {
-        testOptions->fContextOptions.fInternalMultisampleCount = FLAGS_internalSamples;
+        testOptions->fContextOptions.fInternalMultisampleCount =
+                skgpu::graphite::ToSampleCount(FLAGS_internalSamples);
     }
     if (FLAGS_internalMSAATileSize > 0) {
         testOptions->fContextOptions.fInternalMSAATileSize = {FLAGS_internalMSAATileSize,
                                                               FLAGS_internalMSAATileSize};
     }
+    if (FLAGS_minMSAAPathSize >= 0) {
+        testOptions->fContextOptions.fMinimumPathSizeForMSAA = FLAGS_minMSAAPathSize;
+    }
+    if (FLAGS_useDrawListLayer) {
+        testOptions->fOptionsPriv.fDrawListLayer = FLAGS_useDrawListLayer;
+    }
+
 #if defined(SK_DAWN)
     testOptions->fDisableTintSymbolRenaming = FLAGS_disable_tint_symbol_renaming;
     testOptions->fNeverYieldToWebGPU = FLAGS_neverYieldToWebGPU;

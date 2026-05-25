@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #ifndef editor_DEFINED
 #define editor_DEFINED
@@ -114,7 +114,7 @@ private:
         int fHeight = 0;
         bool fShaped = false;
 
-        TextLine(StringSlice t) : fText(std::move(t)) {}
+        explicit TextLine(StringSlice t) : fText(std::move(t)) {}
         TextLine() {}
     };
     std::vector<TextLine> fLines;

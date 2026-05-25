@@ -25,7 +25,6 @@ skia_cc_library(
         "//bench:__pkg__",
         "//gm:__pkg__",
         "//tests:__subpackages__",
-        "//tools/testrunners/benchmark:__pkg__",
         "//tools/viewer:__pkg__",
     ],
     deps = ["//:core"],
@@ -60,16 +59,15 @@ skia_cc_library(
         "//bench:__pkg__",
         "//dm:__pkg__",
         "//tools/gpu:__pkg__",
-        "//tools/testrunners/benchmark:__pkg__",
     ],
     deps = ["//src/base"],
 )
 
 skia_objc_library(
     name = "autorelease_pool_objc",
-    srcs = ["AutoreleasePool.mm"],
     hdrs = ["AutoreleasePool.h"],
-    visibility = ["//tools/gpu:__pkg__"],
+    non_arc_srcs = ["AutoreleasePool.mm"],
+    visibility = ["//tools/ganesh:__pkg__"],
     deps = ["//src/base"],
 )
 
@@ -80,29 +78,9 @@ skia_cc_library(
     visibility = [
         "//dm:__pkg__",
         "//tools/debugger:__pkg__",
+        "//tools/viewer:__pkg__",
     ],
     deps = ["//:core"],
-)
-
-skia_cc_library(
-    name = "ddl_utils",
-    testonly = True,
-    srcs = [
-        "DDLPromiseImageHelper.cpp",
-        "DDLPromiseImageHelper.h",
-        "DDLTileHelper.cpp",
-        "DDLTileHelper.h",
-    ],
-    hdrs = [
-        "DDLPromiseImageHelper.h",
-        "DDLTileHelper.h",
-    ],
-    visibility = ["//dm:__pkg__"],
-    deps = [
-        "//:core",
-        "//src/codec:codec_support_priv",
-        "//src/gpu/ganesh:ganesh_TEST_UTIL",
-    ],
 )
 
 skia_cc_library(
@@ -165,7 +143,6 @@ skia_cc_library(
     visibility = [
         "//bench:__pkg__",
         "//dm:__pkg__",
-        "//tools/testrunners/benchmark:__pkg__",
     ],
     deps = ["//:core"],
 )
@@ -217,6 +194,28 @@ skia_cc_library(
         "//src/base",
         "//src/core:core_priv",
         "//tools:resources",
+    ],
+)
+
+skia_cc_library(
+    name = "deserial_procs_utils",
+    testonly = True,
+    srcs = [
+        "DeserialProcsUtils.cpp",
+    ],
+    hdrs = [
+        "DeserialProcsUtils.h",
+    ],
+    visibility = [
+        "//bench:__subpackages__",
+        "//dm:__pkg__",
+        "//gm:__subpackages__",
+        "//tools/viewer:__pkg__",
+    ],
+    deps = [
+        "//:core",
+        "//:png_decode_libpng",
+        "//tools/fonts:font_tool_utils",
     ],
 )
 
@@ -333,6 +332,7 @@ skia_cc_library(
         "//src/base:headers_to_compile",
         "//src/codec:headers_to_compile",
         "//src/core:headers_to_compile",
+        "//src/gpu/ganesh/mock:headers_to_compile",
     ],
     copts = [
         # We don't want errors like "unused symbol"
@@ -355,7 +355,8 @@ skia_cc_library(
         "//:pathops",
         "//:pdf_writer",
         "//:png_decode_codec",
-        "//:png_encode_codec",
+        "//:png_encode_libpng",
+        "//:png_encode_rust",
         "//:skparagraph_harfbuzz_skunicode",
         "//:skresources",
         "//:skshaper_core",

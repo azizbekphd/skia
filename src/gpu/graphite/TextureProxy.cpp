@@ -8,6 +8,7 @@
 #include "src/gpu/graphite/TextureProxy.h"
 
 #include "include/gpu/graphite/Recorder.h"
+#include "include/private/SkPixelStorage.h"
 #include "src/core/SkMipmap.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/RecorderPriv.h"
@@ -55,6 +56,10 @@ TextureProxy::TextureProxy(SkISize dimensions,
 }
 
 TextureProxy::~TextureProxy() {}
+
+SkPixelStorage::Type TextureProxy::type() const {
+    return SkPixelStorage::Type::kTextureProxy;
+}
 
 SkISize TextureProxy::dimensions() const {
     SkASSERT(!this->isFullyLazy() || this->isInstantiated());
@@ -168,10 +173,7 @@ sk_sp<TextureProxy> TextureProxy::Make(const Caps* caps,
         return nullptr;
     }
 
-    sk_sp<TextureProxy> proxy{new TextureProxy(dimensions,
-                                               textureInfo,
-                                               std::move(label),
-                                               budgeted)};
+    sk_sp<TextureProxy> proxy {new TextureProxy(dimensions, textureInfo, label, budgeted)};
     if (budgeted == Budgeted::kNo) {
         // Instantiate immediately to avoid races later on if the client starts to use the wrapping
         // object on multiple threads.

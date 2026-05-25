@@ -18,7 +18,6 @@
 #include "src/gpu/graphite/ShaderInfo.h"
 #include "src/gpu/graphite/TextureInfoPriv.h"
 #include "src/gpu/graphite/mtl/MtlGraphiteUtils.h"
-#include "src/gpu/graphite/mtl/MtlResourceProvider.h"
 #include "src/gpu/graphite/mtl/MtlSharedContext.h"
 #include "src/gpu/mtl/MtlUtilsPriv.h"
 #include "src/sksl/SkSLCompiler.h"
@@ -41,11 +40,7 @@ inline MTLVertexFormat attribute_type_to_mtlformat(VertexAttribType type) {
         case VertexAttribType::kFloat4:
             return MTLVertexFormatFloat4;
         case VertexAttribType::kHalf:
-            if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
-                return MTLVertexFormatHalf;
-            } else {
-                return MTLVertexFormatInvalid;
-            }
+            return MTLVertexFormatHalf;
         case VertexAttribType::kHalf2:
             return MTLVertexFormatHalf2;
         case VertexAttribType::kHalf4:
@@ -59,31 +54,19 @@ inline MTLVertexFormat attribute_type_to_mtlformat(VertexAttribType type) {
         case VertexAttribType::kUInt2:
             return MTLVertexFormatUInt2;
         case VertexAttribType::kByte:
-            if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
-                return MTLVertexFormatChar;
-            } else {
-                return MTLVertexFormatInvalid;
-            }
+            return MTLVertexFormatChar;
         case VertexAttribType::kByte2:
             return MTLVertexFormatChar2;
         case VertexAttribType::kByte4:
             return MTLVertexFormatChar4;
         case VertexAttribType::kUByte:
-            if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
-                return MTLVertexFormatUChar;
-            } else {
-                return MTLVertexFormatInvalid;
-            }
+            return MTLVertexFormatUChar;
         case VertexAttribType::kUByte2:
             return MTLVertexFormatUChar2;
         case VertexAttribType::kUByte4:
             return MTLVertexFormatUChar4;
         case VertexAttribType::kUByte_norm:
-            if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
-                return MTLVertexFormatUCharNormalized;
-            } else {
-                return MTLVertexFormatInvalid;
-            }
+            return MTLVertexFormatUCharNormalized;
         case VertexAttribType::kUByte4_norm:
             return MTLVertexFormatUChar4Normalized;
         case VertexAttribType::kShort2:
@@ -99,11 +82,7 @@ inline MTLVertexFormat attribute_type_to_mtlformat(VertexAttribType type) {
         case VertexAttribType::kUInt:
             return MTLVertexFormatUInt;
         case VertexAttribType::kUShort_norm:
-            if (@available(macOS 10.13, iOS 11.0, tvOS 11.0, *)) {
-                return MTLVertexFormatUShortNormalized;
-            } else {
-                return MTLVertexFormatInvalid;
-            }
+            return MTLVertexFormatUShortNormalized;
         case VertexAttribType::kUShort4_norm:
             return MTLVertexFormatUShort4Normalized;
     }
@@ -188,29 +167,13 @@ static MTLBlendFactor blend_coeff_to_mtl_blend(skgpu::BlendCoeff coeff) {
         case skgpu::BlendCoeff::kIConstC:
             return MTLBlendFactorOneMinusBlendColor;
         case skgpu::BlendCoeff::kS2C:
-            if (@available(macOS 10.12, iOS 11.0, tvOS 11.0, *)) {
-                return MTLBlendFactorSource1Color;
-            } else {
-                return MTLBlendFactorZero;
-            }
+            return MTLBlendFactorSource1Color;
         case skgpu::BlendCoeff::kIS2C:
-            if (@available(macOS 10.12, iOS 11.0, tvOS 11.0, *)) {
-                return MTLBlendFactorOneMinusSource1Color;
-            } else {
-                return MTLBlendFactorZero;
-            }
+            return MTLBlendFactorOneMinusSource1Color;
         case skgpu::BlendCoeff::kS2A:
-            if (@available(macOS 10.12, iOS 11.0, tvOS 11.0, *)) {
-                return MTLBlendFactorSource1Alpha;
-            } else {
-                return MTLBlendFactorZero;
-            }
+            return MTLBlendFactorSource1Alpha;
         case skgpu::BlendCoeff::kIS2A:
-            if (@available(macOS 10.12, iOS 11.0, tvOS 11.0, *)) {
-                return MTLBlendFactorOneMinusSource1Alpha;
-            } else {
-                return MTLBlendFactorZero;
-            }
+            return MTLBlendFactorOneMinusSource1Alpha;
         case skgpu::BlendCoeff::kIllegal:
             return MTLBlendFactorZero;
     }
@@ -269,7 +232,6 @@ static MTLRenderPipelineColorAttachmentDescriptor* create_color_attachment(
 
 sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
         const MtlSharedContext* sharedContext,
-        MtlResourceProvider* resourceProvider,
         const RuntimeEffectDictionary* runtimeDict,
         const UniqueKey& pipelineKey,
         const GraphicsPipelineDesc& pipelineDesc,
@@ -287,7 +249,6 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
     ShaderErrorHandler* errorHandler = sharedContext->caps()->shaderErrorHandler();
 
     const RenderStep* step = sharedContext->rendererProvider()->lookup(pipelineDesc.renderStepID());
-    const bool useStorageBuffers = sharedContext->caps()->storageBufferSupport();
 
     UniquePaintParamsID paintID = pipelineDesc.paintParamsID();
 
@@ -295,12 +256,9 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
             ShaderInfo::Make(sharedContext->caps(),
                              sharedContext->shaderCodeDictionary(),
                              runtimeDict,
+                             renderPassDesc,
                              step,
-                             paintID,
-                             useStorageBuffers,
-                             renderPassDesc.fColorAttachment.fFormat,
-                             renderPassDesc.fWriteSwizzle,
-                             renderPassDesc.fDstReadStrategy);
+                             paintID);
 
     const std::string& fsSkSL = shaderInfo->fragmentSkSL();
     const BlendInfo& blendInfo = shaderInfo->blendInfo();
@@ -331,7 +289,7 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
             sharedContext, shaderInfo->fsLabel(), fsMSL.fText, errorHandler);
 
     sk_cfp<id<MTLDepthStencilState>> dss =
-            resourceProvider->findOrCreateCompatibleDepthStencilState(step->depthStencilSettings());
+            sharedContext->getCompatibleDepthStencilState(step->depthStencilSettings());
 
     PipelineInfo pipelineInfo{ *shaderInfo, pipelineCreationFlags,
                                pipelineKey.hash(), compilationID };
@@ -340,26 +298,23 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(
     pipelineInfo.fNativeFragmentShader = std::move(fsMSL.fText);
 #endif
 
-    std::string pipelineLabel =
-            GetPipelineLabel(sharedContext->shaderCodeDictionary(), renderPassDesc, step, paintID);
-    return Make(sharedContext,
-                pipelineLabel,
-                pipelineInfo,
-                {vsLibrary.get(), "vertexMain"},
-                step->appendsVertices() ? MTLVertexStepFunctionPerVertex :
-                                          MTLVertexStepFunctionPerInstance,
-                step->staticAttributes(),
-                step->appendAttributes(),
-                {fsLibrary.get(), "fragmentMain"},
-                std::move(dss),
-                step->depthStencilSettings().fStencilReferenceValue,
-                blendInfo,
-                renderPassDesc);
+   return Make(sharedContext,
+               shaderInfo->pipelineLabel(),
+               pipelineInfo,
+               {vsLibrary.get(), "vertexMain"},
+               step->appendsVertices() ? MTLVertexStepFunctionPerVertex :
+                                         MTLVertexStepFunctionPerInstance,
+               step->staticAttributes(),
+               step->appendAttributes(),
+               {fsLibrary.get(), "fragmentMain"},
+               std::move(dss),
+               step->depthStencilSettings().fStencilReferenceValue,
+               blendInfo,
+               renderPassDesc);
 }
 
 sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::MakeLoadMSAAPipeline(
         const MtlSharedContext* sharedContext,
-        MtlResourceProvider* resourceProvider,
         const RenderPassDesc& renderPassDesc) {
     static const char* kLoadMSAAShaderText =
             "#include <metal_stdlib>\n"
@@ -389,8 +344,10 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::MakeLoadMSAAPipeline(
                                               kLoadMSAAShaderText,
                                               sharedContext->caps()->shaderErrorHandler());
     BlendInfo noBlend{}; // default is equivalent to kSrc blending
+
+    static constexpr DepthStencilSettings kIgnoreDSS;
     sk_cfp<id<MTLDepthStencilState>> ignoreDS =
-            resourceProvider->findOrCreateCompatibleDepthStencilState({});
+            sharedContext->getCompatibleDepthStencilState(kIgnoreDSS);
 
     std::string pipelineLabel = "LoadMSAAFromResolve + ";
     pipelineLabel += renderPassDesc.toString().c_str();
@@ -452,7 +409,7 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sha
             create_color_attachment(TextureFormatToMTLPixelFormat(colorFormat), blendInfo);
     (*psoDescriptor).colorAttachments[0] = mtlColorAttachment;
 
-    (*psoDescriptor).rasterSampleCount = renderPassDesc.fColorAttachment.fSampleCount;
+    (*psoDescriptor).rasterSampleCount = (uint8_t) renderPassDesc.fColorAttachment.fSampleCount;
 
     if (TextureFormatHasStencil(dsFormat)) {
         (*psoDescriptor).stencilAttachmentPixelFormat = TextureFormatToMTLPixelFormat(dsFormat);
@@ -476,6 +433,7 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sha
 
     return sk_sp<MtlGraphicsPipeline>(new MtlGraphicsPipeline(sharedContext,
                                                               pipelineInfo,
+                                                              label,
                                                               std::move(pso),
                                                               std::move(dss),
                                                               stencilRefValue));
@@ -483,13 +441,17 @@ sk_sp<MtlGraphicsPipeline> MtlGraphicsPipeline::Make(const MtlSharedContext* sha
 
 MtlGraphicsPipeline::MtlGraphicsPipeline(const skgpu::graphite::SharedContext* sharedContext,
                                          const PipelineInfo& pipelineInfo,
+                                         std::string_view pipelineLabel,
                                          sk_cfp<id<MTLRenderPipelineState>> pso,
                                          sk_cfp<id<MTLDepthStencilState>> dss,
                                          uint32_t refValue)
-        : GraphicsPipeline(sharedContext, pipelineInfo)
+        : GraphicsPipeline(sharedContext, pipelineInfo, pipelineLabel)
         , fPipelineState(std::move(pso))
         , fDepthStencilState(std::move(dss))
-        , fStencilReferenceValue(refValue) {}
+        , fStencilReferenceValue(refValue) {
+    // Update the newly-created underlying GPU object's label to match the Resource's
+    this->synchronizeBackendLabel();
+}
 
 void MtlGraphicsPipeline::freeGpuData() {
     fPipelineState.reset();

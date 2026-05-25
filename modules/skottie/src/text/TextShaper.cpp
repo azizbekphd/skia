@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Google Inc.
+ * Copyright 2019 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -25,18 +25,14 @@
 #include "modules/skshaper/include/SkShaper.h"
 #include "modules/skshaper/include/SkShaper_factory.h"
 #include "modules/skunicode/include/SkUnicode.h"
-#include "src/base/SkTLazy.h"
 #include "src/base/SkUTF.h"
 #include "src/core/SkFontPriv.h"
 
 #include <algorithm>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <utility>
-
-#if !defined(SK_DISABLE_LEGACY_SHAPER_FACTORY)
-#include "modules/skshaper/utils/FactoryHelpers.h"
-#endif
 
 class SkPaint;
 
@@ -235,7 +231,7 @@ public:
         };
 
         // Only compute the extent box when needed.
-        SkTLazy<SkRect> ebox;
+        std::optional<SkRect> ebox;
 
         // Vertical adjustments.
         float v_offset = -fDesc.fLineShift;
@@ -249,24 +245,24 @@ public:
             break;
         case Shaper::VAlign::kHybridTop:
         case Shaper::VAlign::kVisualTop:
-            ebox.init(extent_box(fDesc.fVAlign == Shaper::VAlign::kHybridTop));
+            ebox.emplace(extent_box(fDesc.fVAlign == Shaper::VAlign::kHybridTop));
             v_offset += fBox.fTop - ebox->fTop;
             break;
         case Shaper::VAlign::kHybridCenter:
         case Shaper::VAlign::kVisualCenter:
-            ebox.init(extent_box(fDesc.fVAlign == Shaper::VAlign::kHybridCenter));
+            ebox.emplace(extent_box(fDesc.fVAlign == Shaper::VAlign::kHybridCenter));
             v_offset += fBox.centerY() - ebox->centerY();
             break;
         case Shaper::VAlign::kHybridBottom:
         case Shaper::VAlign::kVisualBottom:
-            ebox.init(extent_box(fDesc.fVAlign == Shaper::VAlign::kHybridBottom));
+            ebox.emplace(extent_box(fDesc.fVAlign == Shaper::VAlign::kHybridBottom));
             v_offset += fBox.fBottom - ebox->fBottom;
             break;
         }
 
         if (shaped_size) {
-            if (!ebox.isValid()) {
-                ebox.init(extent_box(true));
+            if (!ebox.has_value()) {
+                ebox.emplace(extent_box(true));
             }
             *shaped_size = SkSize::Make(ebox->width(), ebox->height());
         }
@@ -403,7 +399,7 @@ private:
             // is exactly the same as AE.  E.g. are 'acute' glyphs anchored separately for fonts
             // in which they're distinct?
             fAdvanceBuffer.resize(run.fSize);
-            fFont.getWidths({glyphs, run.fSize}, {fAdvanceBuffer.data(), run.fSize});
+            run.fFont.getWidths({glyphs, run.fSize}, {fAdvanceBuffer.data(), run.fSize});
         }
 
         // In fragmented mode we immediately push the glyphs to fResult,
@@ -628,16 +624,16 @@ public:
             break;
         case Shaper::Capitalization::kUpperCase:
             if (unicode) {
-                *fText.writable() = unicode->toUpper(*fText);
+                fText = unicode->toUpper(fText);
             }
             break;
         }
     }
 
-    operator const SkString&() const { return *fText; }
+    operator const SkString&() const { return fText; }
 
 private:
-    SkTCopyOnFirstWrite<SkString> fText;
+    SkString fText;
 };
 
 } // namespace
@@ -742,18 +738,5 @@ SkRect Shaper::Result::computeVisualBounds() const {
 
     return bounds;
 }
-
-#if !defined(SK_DISABLE_LEGACY_SHAPER_FACTORY)
-Shaper::Result Shaper::Shape(const SkString& text, const TextDesc& desc, const SkPoint& point,
-             const sk_sp<SkFontMgr>& fontmgr) {
-    return Shaper::Shape(text, desc, point, fontmgr, SkShapers::BestAvailable());
-}
-
-Shaper::Result Shaper::Shape(const SkString& text, const TextDesc& desc, const SkRect& box,
-             const sk_sp<SkFontMgr>& fontmgr) {
-    return Shaper::Shape(text, desc, box, fontmgr, SkShapers::BestAvailable());
-}
-
-#endif
 
 } // namespace skottie

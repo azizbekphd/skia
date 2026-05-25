@@ -50,17 +50,18 @@ class DebugCanvas : public SkCanvasVirtualEnforcer<SkCanvas> {
 public:
     DebugCanvas(int width, int height);
 
-    DebugCanvas(SkIRect bounds);
+    explicit DebugCanvas(SkIRect bounds);
 
     ~DebugCanvas() override;
 
     /**
-     * Provide a DebugLayerManager for mskp files containing layer information
-     * when set this DebugCanvas will attempt to parse layer info from annotations.
-     * it will store layer pictures to the layer manager, and interpret some drawImageRects
-     * as layer draws, deferring to the layer manager for images.
-     * Provide a frame number that will be passed to all layer manager functions to identify this
-     * DebugCanvas.
+     * Provide a DebugLayerManager for mskp files that contain layer
+     * information. When set, this DebugCanvas will attempt to parse the layer
+     * information from the mskp annotations. It will store layer images to the
+     * DebugLayerManager. It will also interpret some drawImageRects as layer
+     * commands, deferring to the layer manager for images. You may provide a
+     * frame number that will be passed to all DebugLayerManager functions to
+     * identify this DebugCanvas.
      *
      * Used only in wasm debugger animations.
      */

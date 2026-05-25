@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google Inc.
+ * Copyright 2018 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -12,8 +12,7 @@
 
 
 void FuzzRegionSetPath(Fuzz* fuzz) {
-    SkPath p;
-    FuzzNicePath(fuzz, &p, 1000);
+    SkPath p = FuzzNicePath(fuzz, 1000);
     SkRegion r1;
     bool initR1;
     fuzz->next(&initR1);

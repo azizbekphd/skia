@@ -149,6 +149,7 @@ VkDescriptorType DsTypeEnumToVkDs(DescriptorType type) {
     M(TextureFormat::kRGBA16F,        VK_FORMAT_R16G16B16A16_SFLOAT)                       \
     M(TextureFormat::kRGBA32F,        VK_FORMAT_R32G32B32A32_SFLOAT)                       \
     M(TextureFormat::kRGB10_A2,       VK_FORMAT_A2B10G10R10_UNORM_PACK32)                  \
+    M(TextureFormat::kRGBA10x6,       VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16)        \
     M(TextureFormat::kRGBA8_sRGB,     VK_FORMAT_R8G8B8A8_SRGB)                             \
     M(TextureFormat::kBGRA8,          VK_FORMAT_B8G8R8A8_UNORM)                            \
     M(TextureFormat::kBGR10_A2,       VK_FORMAT_A2R10G10B10_UNORM_PACK32)                  \
@@ -164,6 +165,12 @@ VkDescriptorType DsTypeEnumToVkDs(DescriptorType type) {
     M(TextureFormat::kYUV8_P2_420,    VK_FORMAT_G8_B8R8_2PLANE_420_UNORM)                  \
     M(TextureFormat::kYUV8_P3_420,    VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM)                 \
     M(TextureFormat::kYUV10x6_P2_420, VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16) \
+    M(TextureFormat::kYUV8_P2_422,    VK_FORMAT_G8_B8R8_2PLANE_422_UNORM)                  \
+    M(TextureFormat::kYUV8_P3_422,    VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM)                 \
+    M(TextureFormat::kYUV10x6_P2_422, VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16) \
+    M(TextureFormat::kYUV8_P2_444,    VK_FORMAT_G8_B8R8_2PLANE_444_UNORM)                  \
+    M(TextureFormat::kYUV8_P3_444,    VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM)                 \
+    M(TextureFormat::kYUV10x6_P2_444, VK_FORMAT_G10X6_B10X6R10X6_2PLANE_444_UNORM_3PACK16) \
     /*TextureFormat::kExternal        VK_FORMAT_UNDEFINED w/ uint64_t sidecar */           \
     M(TextureFormat::kS8,             VK_FORMAT_S8_UINT)                                   \
     M(TextureFormat::kD16,            VK_FORMAT_D16_UNORM)                                 \
@@ -234,10 +241,11 @@ bool RenderPassDescWillLoadMSAAFromResolve(const RenderPassDesc& renderPassDesc)
 
 bool RenderPassDescWillImplicitlyLoadMSAA(const RenderPassDesc& renderPassDesc) {
     SkASSERT(renderPassDesc.fColorAttachment.fFormat != TextureFormat::kUnsupported);
-    SkASSERT(renderPassDesc.fColorAttachment.fSampleCount > 1 ||
+    SkASSERT(renderPassDesc.fColorAttachment.fSampleCount > SampleCount::k1 ||
              renderPassDesc.fColorResolveAttachment.fFormat == TextureFormat::kUnsupported);
 
-    return renderPassDesc.fColorAttachment.fSampleCount == 1 && renderPassDesc.fSampleCount > 1;
+    return renderPassDesc.fColorAttachment.fSampleCount == SampleCount::k1 &&
+           renderPassDesc.fSampleCount > SampleCount::k1;
 }
 
 RenderPassDesc MakePipelineCompatibleRenderPass(const RenderPassDesc& renderPassDesc) {

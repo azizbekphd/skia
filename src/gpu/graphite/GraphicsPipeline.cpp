@@ -19,10 +19,12 @@
 namespace skgpu::graphite {
 
 GraphicsPipeline::GraphicsPipeline(const SharedContext* sharedContext,
-                                   const PipelineInfo& pipelineInfo)
+                                   const PipelineInfo& pipelineInfo,
+                                   std::string_view label)
         : Resource(sharedContext,
                    Ownership::kOwned,
-                   /*gpuMemorySize=*/0)
+                   /*gpuMemorySize=*/0,
+                   label)
         , fPipelineInfo(pipelineInfo) {}
 
 GraphicsPipeline::~GraphicsPipeline() {
@@ -43,8 +45,7 @@ GraphicsPipeline::PipelineInfo::PipelineInfo(
             uint32_t compilationID)
         : fDstReadStrategy(shaderInfo.dstReadStrategy())
         , fNumFragTexturesAndSamplers(shaderInfo.numFragmentTexturesAndSamplers())
-        , fHasPaintUniforms(shaderInfo.hasPaintUniforms())
-        , fHasStepUniforms(shaderInfo.hasStepUniforms())
+        , fHasCombinedUniforms(shaderInfo.hasCombinedUniforms())
         , fHasGradientBuffer(shaderInfo.hasGradientBuffer())
         , fUniqueKeyHash(uniqueKeyHash)
         , fCompilationID(compilationID)
@@ -53,14 +54,10 @@ GraphicsPipeline::PipelineInfo::PipelineInfo(
     fSkSLVertexShader = SkShaderUtils::PrettyPrint(shaderInfo.vertexSkSL());
     fSkSLFragmentShader = SkShaderUtils::PrettyPrint(shaderInfo.fragmentSkSL());
 #endif
-
-#if defined(SK_TRACE_GRAPHITE_PIPELINE_USE) || defined(GPU_TEST_UTILS)
-    fLabel = shaderInfo.fsLabel();
-#endif
 }
 
 #if defined(GPU_TEST_UTILS)
-SkString GraphicsPipelineDesc::toString(ShaderCodeDictionary* dict) const {
+SkString GraphicsPipelineDesc::toString(const Caps* caps, ShaderCodeDictionary* dict) const {
     SkString tmp;
 
     tmp.append(RenderStep::RenderStepName(fRenderStepID));
@@ -68,7 +65,7 @@ SkString GraphicsPipelineDesc::toString(ShaderCodeDictionary* dict) const {
 
     PaintParamsKey key = dict->lookup(fPaintID);
 
-    tmp.append(key.toString(dict));
+    tmp.append(key.toString(caps, dict));
 
     return tmp;
 }

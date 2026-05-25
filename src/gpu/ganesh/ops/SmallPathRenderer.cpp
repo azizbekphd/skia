@@ -33,8 +33,8 @@
 #include "src/core/SkDraw.h"
 #include "src/core/SkMatrixPriv.h"
 #include "src/core/SkRasterClip.h"
-#include "src/gpu/AtlasTypes.h"
 #include "src/gpu/BufferWriter.h"
+#include "src/gpu/MaskFormat.h"
 #include "src/gpu/ganesh/GrAppliedClip.h"
 #include "src/gpu/ganesh/GrAuditTrail.h"
 #include "src/gpu/ganesh/GrBuffer.h"
@@ -87,8 +87,6 @@ struct GrUserStencilSettings;
 using namespace skia_private;
 
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
-
-using MaskFormat = skgpu::MaskFormat;
 
 namespace skgpu::ganesh {
 
@@ -264,7 +262,7 @@ private:
             &flushInfo.fVertexBuffer, &flushInfo.fVertexOffset);
 
         flushInfo.fIndexBuffer = target->resourceProvider()->refNonAAQuadIndexBuffer();
-        if (!vertices || !flushInfo.fIndexBuffer) {
+        if (!vertices || !flushInfo.fIndexBuffer) SK_UNLIKELY {
             SkDebugf("Could not allocate vertices\n");
             return;
         }
@@ -445,8 +443,7 @@ private:
         // TODO We should really generate this directly into the plot somehow
         SkAutoSMalloc<1024> dfStorage(width * height * sizeof(unsigned char));
 
-        SkPath path;
-        shape.asPath(&path);
+        SkPath path = shape.asPath();
         // Generate signed distance field directly from SkPath
         bool succeed = GrGenerateDistanceFieldFromPath((unsigned char*)dfStorage.get(),
                                                        path, drawMatrix, width, height,
@@ -464,7 +461,7 @@ private:
             paint.setStyle(SkPaint::kFill_Style);
             paint.setAntiAlias(true);
 
-            SkDraw draw;
+            skcpu::Draw draw;
 
             SkRasterClip rasterClip;
             rasterClip.setRect(devPathBounds);
@@ -528,8 +525,7 @@ private:
         SkASSERT(devPathBounds.width() > 0);
         SkASSERT(devPathBounds.height() > 0);
 
-        SkPath path;
-        shape.asPath(&path);
+        SkPath path = shape.asPath();
         // setup bitmap backing
         SkAutoPixmapStorage dst;
         if (!dst.tryAlloc(SkImageInfo::MakeA8(devPathBounds.width(), devPathBounds.height()))) {
@@ -542,7 +538,7 @@ private:
         paint.setStyle(SkPaint::kFill_Style);
         paint.setAntiAlias(true);
 
-        SkDraw draw;
+        skcpu::Draw draw;
 
         SkRasterClip rasterClip;
         rasterClip.setRect(devPathBounds);

@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_cubicTo_2, 256, 84, false, 0) {
@@ -7,9 +7,10 @@ void draw(SkCanvas* canvas) {
     paint.setAntiAlias(true);
     paint.setStyle(SkPaint::kStroke_Style);
     SkPoint pts[] = { {20, 20}, {300, 80}, {-140, 90}, {220, 10} };
-    SkPath path;
-    path.moveTo(pts[0]);
-    path.cubicTo(pts[1], pts[2], pts[3]);
+    SkPath path = SkPathBuilder()
+                  .moveTo(pts[0])
+                  .cubicTo(pts[1], pts[2], pts[3])
+                  .detach();
     canvas->drawPath(path, paint);
 }
 }  // END FIDDLE

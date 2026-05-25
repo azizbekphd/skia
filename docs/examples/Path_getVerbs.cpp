@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_getVerbs, 256, 256, true, 0) {
@@ -12,9 +12,10 @@ void draw(SkCanvas* canvas) {
          }
          SkDebugf("\n");
     };
-    SkPath path;
-    path.lineTo(20, 20);
-    path.lineTo(-10, -10);
+    SkPath path = SkPathBuilder()
+                  .lineTo(20, 20)
+                  .lineTo(-10, -10)
+                  .detach();
     uint8_t verbs[3];
     debugster("no verbs",  path, nullptr, 0);
     debugster("zero max",  path, verbs, 0);

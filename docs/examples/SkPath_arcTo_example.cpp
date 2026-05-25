@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(SkPath_arcTo_example, 512, 512, false, 0) {
@@ -15,8 +15,7 @@ void draw(SkCanvas* canvas) {
     float startAngle = 0;
     float sweepAngle = 60;
 
-    SkPath arc;
-    arc.arcTo(oval, startAngle, sweepAngle, false);
+    SkPath arc = SkPathBuilder().arcTo(oval, startAngle, sweepAngle, false).detach();
 
     paint.setStrokeWidth(5);
     paint.setColor(SkColorSetARGB(255, 0, 0, 255));

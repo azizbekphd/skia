@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Google Inc.
+ * Copyright 2023 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -17,6 +17,6 @@ class SkData;
 #include <vector>
 
 // Find and parse all XMP metadata, given a list of all APP1 segment parameters.
-std::unique_ptr<SkXmp> SkJpegMakeXmp(const std::vector<sk_sp<SkData>>& decoderApp1Params);
+std::unique_ptr<SkXmp> SkJpegMakeXmp(const std::vector<sk_sp<const SkData>>& decoderApp1Params);
 
 #endif

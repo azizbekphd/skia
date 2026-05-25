@@ -5,7 +5,7 @@
  * found in the LICENSE file.
  */
 
-// This test only works with the GPU backend.
+// This test only works with the Ganesh backend.
 
 #include "gm/gm.h"
 #include "include/core/SkBitmap.h"
@@ -26,9 +26,10 @@
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/SurfaceDrawContext.h"
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
+#include "src/gpu/ganesh/image/GrMippedBitmap.h"
 #include "tools/DecodeUtils.h"
 #include "tools/Resources.h"
-#include "tools/gpu/TestOps.h"
+#include "tools/ganesh/TestOps.h"
 
 #include <memory>
 #include <utility>
@@ -101,8 +102,10 @@ protected:
         if (mipmapped == skgpu::Mipmapped::kYes && !rContext->priv().caps()->mipmapSupport()) {
             return DrawResult::kSkip;
         }
-        auto view = std::get<0>(GrMakeCachedBitmapProxyView(
-                rContext, fBitmap, /*label=*/"DrawResult_Draw_BitMap", mipmapped));
+        auto view = std::get<0>(GrMakeCachedBitmapProxyView(rContext,
+                                                            GrMippedBitmap(fBitmap),
+                                                            /*label=*/"DrawResult_Draw_BitMap",
+                                                            mipmapped));
         if (!view) {
             *errorMsg = "Failed to create proxy.";
             return DrawResult::kFail;
@@ -135,8 +138,11 @@ protected:
         SkBitmap subsetBmp;
         fBitmap.extractSubset(&subsetBmp, texelSubset);
         subsetBmp.setImmutable();
-        auto subsetView = std::get<0>(GrMakeCachedBitmapProxyView(
-                rContext, subsetBmp, /*label=*/"DrawResult_Draw_SubsetBitMap", mipmapped));
+        auto subsetView =
+                std::get<0>(GrMakeCachedBitmapProxyView(rContext,
+                                                        GrMippedBitmap(subsetBmp),
+                                                        /*label=*/"DrawResult_Draw_SubsetBitMap",
+                                                        mipmapped));
 
         SkRect localRect = SkRect::Make(fBitmap.bounds()).makeOutset(kDrawPad, kDrawPad);
 

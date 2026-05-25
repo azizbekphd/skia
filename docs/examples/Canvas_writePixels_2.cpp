@@ -1,13 +1,12 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Canvas_writePixels_2, 256, 256, false, 0) {
 void draw(SkCanvas* canvas) {
     SkImageInfo imageInfo = SkImageInfo::MakeN32Premul(2, 2);
     SkBitmap bitmap;
-    bitmap.setInfo(imageInfo);
     uint32_t pixels[4];
-    bitmap.setPixels(pixels);
+    bitmap.installPixels(imageInfo, pixels, imageInfo.minRowBytes());
     for (int y = 0; y < 256; y += 2) {
         for (int x = 0; x < 256;  x += 2) {
             pixels[0] = SkColorSetRGB(x, y, x | y);

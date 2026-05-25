@@ -46,7 +46,8 @@ public:
     static sk_sp<Texture> Make(const VulkanSharedContext*,
                                SkISize dimensions,
                                const TextureInfo&,
-                               sk_sp<VulkanYcbcrConversion>);
+                               sk_sp<VulkanYcbcrConversion>,
+                               std::string_view label);
 
     static sk_sp<Texture> MakeWrapped(const VulkanSharedContext*,
                                       SkISize dimensions,
@@ -54,7 +55,8 @@ public:
                                       sk_sp<MutableTextureState>,
                                       VkImage,
                                       const VulkanAlloc&,
-                                      sk_sp<VulkanYcbcrConversion>);
+                                      sk_sp<VulkanYcbcrConversion>,
+                                      std::string_view label);
 
     ~VulkanTexture() override;
 
@@ -66,9 +68,8 @@ public:
     void setImageLayout(VulkanCommandBuffer* buffer,
                         VkImageLayout newLayout,
                         VkAccessFlags dstAccessMask,
-                        VkPipelineStageFlags dstStageMask,
-                        bool byRegion) const {
-        this->setImageLayoutAndQueueIndex(buffer, newLayout, dstAccessMask, dstStageMask, byRegion,
+                        VkPipelineStageFlags dstStageMask) const {
+        this->setImageLayoutAndQueueIndex(buffer, newLayout, dstAccessMask, dstStageMask,
                                           VK_QUEUE_FAMILY_IGNORED);
     }
 
@@ -76,7 +77,6 @@ public:
                                      VkImageLayout newLayout,
                                      VkAccessFlags dstAccessMask,
                                      VkPipelineStageFlags dstStageMask,
-                                     bool byRegion,
                                      uint32_t newQueueFamilyIndex) const;
 
     // This simply updates our internal tracking of the image layout and does not actually perform
@@ -103,15 +103,21 @@ public:
                                                   const VulkanTexture* depthStencilTexture) const;
     void addCachedFramebuffer(sk_sp<VulkanFramebuffer>);
 
+    bool canUploadOnHost() const override;
+    // Once upload is finished, the image will be in the VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    // layout.
+    bool uploadDataOnHost(const UploadSource& source) override;
+
 private:
     VulkanTexture(const VulkanSharedContext* sharedContext,
                   SkISize dimensions,
-                  const TextureInfo& info,
+                  const TextureInfo&,
                   sk_sp<MutableTextureState>,
                   VkImage,
                   const VulkanAlloc&,
                   Ownership,
-                  sk_sp<VulkanYcbcrConversion>);
+                  sk_sp<VulkanYcbcrConversion>,
+                  std::string_view label);
 
     void freeGpuData() override;
 

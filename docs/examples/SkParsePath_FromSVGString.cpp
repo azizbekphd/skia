@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(SkParsePath_FromSVGString, 256, 256, false, 0) {
@@ -12,8 +12,7 @@ void draw(SkCanvas* canvas) {
             "L 200 218 "
             "L 24 78 "
             "Z";
-    SkPath path;
-    SkParsePath::FromSVGString(pathString, &path);
+    SkPath path = SkParsePath::FromSVGString(pathString).value_or(SkPath());
     SkPaint paint;
     paint.setAntiAlias(true);
     paint.setStyle(SkPaint::kStroke_Style);

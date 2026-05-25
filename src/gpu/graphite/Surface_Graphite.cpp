@@ -24,6 +24,7 @@
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/Texture.h"
 #include "src/gpu/graphite/TextureFormat.h"
+#include "src/gpu/graphite/TextureInfoPriv.h"
 
 namespace skgpu::graphite {
 
@@ -47,8 +48,8 @@ Recorder* Surface::onGetRecorder() const { return fDevice->recorder(); }
 
 SkRecorder* Surface::onGetBaseRecorder() const { return fDevice->recorder(); }
 
-TextureProxyView Surface::readSurfaceView() const {
-    return fDevice->readSurfaceView();
+const TextureProxyView& Surface::target() const {
+    return fDevice->target();
 }
 
 SkCanvas* Surface::onNewCanvas() { return new SkCanvas(fDevice); }
@@ -58,7 +59,7 @@ sk_sp<SkSurface> Surface::onNewSurface(const SkImageInfo& ii) {
 }
 
 sk_sp<SkImage> Surface::onNewImageSnapshot(const SkIRect* subset) {
-    return this->makeImageCopy(subset, fDevice->target()->mipmapped());
+    return this->makeImageCopy(subset, fDevice->target().mipmapped());
 }
 
 sk_sp<Image> Surface::asImage() const {
@@ -68,6 +69,17 @@ sk_sp<Image> Surface::asImage() const {
     }
     return fImageView;
 }
+
+sk_sp<Image> Surface::asImage(SkColorType otherCT, SkAlphaType otherAT) const {
+    // No conversion, save a malloc.
+    if (otherCT == fImageView->colorType() && otherAT == fImageView->alphaType()) {
+        return fImageView;
+    }
+    // Override the color info for sampling the texture
+    return Image::WrapDevice(fDevice,
+                             SkColorInfo{otherCT, otherAT, fDevice->imageInfo().refColorSpace()});
+}
+
 
 sk_sp<SkImage> Surface::onMakeTemporaryImage() {
     if (this->hasCachedImage()) {
@@ -121,7 +133,10 @@ sk_sp<const SkCapabilities> Surface::onCapabilities() {
     return fDevice->recorder()->priv().caps()->capabilities();
 }
 
-TextureProxy* Surface::backingTextureProxy() const { return fDevice->target(); }
+uint32_t Surface::getPixelStorageID() const {
+    return this->target().proxy()->getPixelStorageId();
+}
+
 
 // Note, devices flushed with this method add their tasks to the provided drawContext's task list,
 // but no last task is tracked. If no drawContext is provided, the task is added to the root task
@@ -146,14 +161,14 @@ sk_sp<Surface> Surface::Make(Recorder* recorder,
                                         backingFit,
                                         SkSurfacePropsCopyOrDefault(props),
                                         initialLoadOp,
-                                        std::move(label),
+                                        label,
                                         registerWithRecorder);
     if (!device) {
         return nullptr;
     }
     // A non-budgeted surface should be fully instantiated before we return it
     // to the client.
-    SkASSERT(budgeted == Budgeted::kYes || device->target()->isInstantiated());
+    SkASSERT(budgeted == Budgeted::kYes || device->target().proxy()->isInstantiated());
     return sk_make_sp<Surface>(std::move(device));
 }
 
@@ -196,12 +211,14 @@ bool validate_backend_texture(const Caps* caps,
         return false;
     }
 
-    return caps->areColorTypeAndTextureInfoCompatible(info.colorType(), texture.info());
+    return AreColorTypeAndFormatCompatible(info.colorType(),
+                                           TextureInfoPriv::ViewFormat(texture.info()));
 }
 
 } // anonymous namespace
 
 namespace SkSurfaces {
+
 sk_sp<SkImage> AsImage(sk_sp<const SkSurface> surface) {
     if (!surface) {
         return nullptr;
@@ -237,8 +254,33 @@ sk_sp<SkSurface> RenderTarget(Recorder* recorder,
         label = "SkSurfaceRenderTarget";
     }
     // The client is getting the ref on this surface so it must be unbudgeted.
-    return skgpu::graphite::Surface::Make(recorder, info, std::move(label), skgpu::Budgeted::kNo,
+    return skgpu::graphite::Surface::Make(recorder, info, label, skgpu::Budgeted::kNo,
                                           mipmapped, SkBackingFit::kExact, props);
+}
+
+sk_sp<SkSurface> WrapBackendTexture(Recorder* recorder,
+                                    const BackendTexture& backendTex,
+                                    sk_sp<SkColorSpace> cs,
+                                    const SkSurfaceProps* props,
+                                    TextureReleaseProc releaseP,
+                                    ReleaseContext releaseC,
+                                    std::string_view label) {
+    // TODO(476410476): When the SkColorType-taking WrapBackendTexture goes away, we can move its
+    // function body here and construct the SkColorInfo from this getDefaultColorType call.
+    auto [colorType, _] =
+            TextureFormatColorTypeInfo(TextureInfoPriv::ViewFormat(backendTex.info()));
+
+    // Force single-channel red colortypes to their alpha equivalent, which is the semantic
+    // behavior expected of single-channel textures with kPremul_SkAlphaType. Currently
+    // WrapBackendTexture assumes kPremul_SkAlphaType.
+    // TODO(michaelludwig): Add alpha type to select between opaque (red) vs premul (alpha-only).
+    switch(colorType) {
+        case kR8_unorm_SkColorType:  colorType = kAlpha_8_SkColorType;   break;
+        case kR16_unorm_SkColorType: colorType = kA16_unorm_SkColorType; break;
+        default: break;
+    }
+    return WrapBackendTexture(recorder, backendTex, colorType, std::move(cs), props,
+                              releaseP, releaseC, label);
 }
 
 sk_sp<SkSurface> WrapBackendTexture(Recorder* recorder,
@@ -271,7 +313,7 @@ sk_sp<SkSurface> WrapBackendTexture(Recorder* recorder,
     }
 
     sk_sp<Texture> texture =
-            recorder->priv().resourceProvider()->createWrappedTexture(backendTex, std::move(label));
+            recorder->priv().resourceProvider()->createWrappedTexture(backendTex, label);
     if (!texture) {
         return nullptr;
     }

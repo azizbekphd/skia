@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google Inc.
+ * Copyright 2018 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -245,7 +245,7 @@ protected:
         for (int i = 0; i < loops * 3; ++i) {
             for (auto& line : fLines) {
                 font.textToGlyphs(line->utf.data(), line->utf.size(), fEncoding,
-                                  {fGlyphIds.data(), line->glyphCount});
+                                  {fGlyphIds.data(), (size_t)line->glyphCount});
             }
         }
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google Inc.
+ * Copyright 2018 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -37,13 +37,13 @@
 #include "src/utils/SkOSPath.h"
 #include "tools/flags/CommandLineFlags.h"
 
-#if !defined(CPU_ONLY)
+#if !defined(CPU_ONLY) && defined(SK_GANESH)
 #include "include/gpu/GpuTypes.h"
 #include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/GrTypes.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "tools/ganesh/GrContextFactory.h"
 #include "tools/gpu/ContextType.h"
-#include "tools/gpu/GrContextFactory.h"
 #endif
 
 #if !defined(CPU_ONLY) && !defined(GPU_ONLY)
@@ -319,7 +319,7 @@ public:
 
         if (frame && stream) {
             SkSerialProcs sProcs;
-            sProcs.fImageProc = [](SkImage* img, void*) -> sk_sp<SkData> {
+            sProcs.fImageProc = [](SkImage* img, void*) -> sk_sp<const SkData> {
                 return SkPngEncoder::Encode(as_IB(img)->directContext(), img,
                                             SkPngEncoder::Options{});
             };
@@ -340,7 +340,7 @@ private:
 
 class GPUGenerator final : public FrameGenerator {
 public:
-#if defined(CPU_ONLY)
+#if defined(CPU_ONLY) || !defined(SK_GANESH)
     static std::unique_ptr<FrameGenerator> Make(FrameSink* sink, const SkMatrix& matrix) {
         return nullptr;
     }

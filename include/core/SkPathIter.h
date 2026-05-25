@@ -1,5 +1,5 @@
 /*
- * Copyright 2025 Google LLC.
+ * Copyright 2025 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -50,6 +50,13 @@ public:
      *  close: pts[0..1] ... as if close were a line from pts[0] to pts[1]
      */
     std::optional<Rec> next();
+
+    std::optional<SkPathVerb> peekNextVerb() const {
+        if (vIndex < fVerbs.size()) {
+            return fVerbs[vIndex];
+        }
+        return {};
+    }
 
 private:
     size_t                   pIndex, vIndex, cIndex;

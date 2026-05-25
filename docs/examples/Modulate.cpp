@@ -1,14 +1,13 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Modulate, 256, 256, false, 0) {
 void draw(SkCanvas* canvas) {
     auto drawSquare = [=](int dx, int dy, SkBlendMode mode, const char* label) -> void {
-        const SkColor colors[] = { SK_ColorBLACK, SK_ColorWHITE };
+        const SkColor4f colors[] = { SkColors::kBlack, SkColors::kWhite };
         const SkPoint horz[] = { { 0, 0 }, { 128, 0 } };
         SkPaint paint;
-        paint.setShader(SkGradientShader::MakeLinear(horz, colors, nullptr, std::size(colors),
-                SkTileMode::kClamp));
+        paint.setShader(SkShaders::LinearGradient(horz, {{colors, {}, SkTileMode::kClamp}, {}}));
         paint.setBlendMode(mode);
         canvas->translate(dx, dy);
         canvas->drawRect({0, 0, 128, 128}, paint);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Google Inc.
+ * Copyright 2020 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -226,8 +226,7 @@ DEF_TEST(SkStrike_FlattenByType, reporter) {
     const SkPackedGlyphID pathPackedGlyphID((SkGlyphID)11);
     SkGlyph pathGlyph{pathPackedGlyphID};
     SkGlyphTestPeer::SetGlyph(&pathGlyph);
-    SkPath path;
-    path.addRect(pathGlyph.rect());
+    SkPath path = SkPath::Rect(pathGlyph.rect());
     pathGlyph.setPath(&alloc, &path, false, false);
     pathsToSend.emplace_back(pathGlyph);
 

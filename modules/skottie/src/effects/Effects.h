@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Google Inc.
+ * Copyright 2019 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -157,7 +157,7 @@ protected:
 
     const SkSize& layerSize() const { return  fLayerSize; }
 
-    struct MaskInfo {
+struct MaskInfo {
         sk_sp<SkShader> fMaskShader;
         bool            fVisible;
     };

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Google Inc.
+ * Copyright 2021 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -25,7 +25,7 @@
 #include "include/private/chromium/SkImageChromium.h"
 #include "src/core/SkTaskGroup.h"
 #include "src/gpu/ganesh/image/SkImage_Ganesh.h"
-#include "tools/gpu/GrContextFactory.h"
+#include "tools/ganesh/GrContextFactory.h"
 
 #include <atomic>
 #include <memory>

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google Inc.
+ * Copyright 2018 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -60,9 +60,9 @@ bool BisectSlide::onChar(SkUnichar c) {
 
         case 'x':
             if (fFoundPaths.size() > 1) {
-                int midpt = (fFoundPaths.size() + 1) / 2;
+                size_t midpt = (fFoundPaths.size() + 1) / 2;
                 fPathHistory.emplace(fFoundPaths, fTossedPaths);
-                fTossedPaths.reset(fFoundPaths.begin() + midpt, fFoundPaths.size() - midpt);
+                fTossedPaths.reset({fFoundPaths.data() + midpt, fFoundPaths.size() - midpt});
                 fFoundPaths.resize_back(midpt);
                 fTrail.push_back('x');
             }

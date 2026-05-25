@@ -12,6 +12,7 @@
 #include "include/core/SkImage.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkTypes.h"
+#include "src/capture/SkCaptureManager.h"
 #include "src/core/SkMipmap.h"
 
 #include <atomic>
@@ -110,7 +111,7 @@ public:
 
     virtual sk_sp<SkImage> onMakeSubset(SkRecorder*, const SkIRect&, RequiredProperties) const = 0;
 
-    virtual sk_sp<SkData> onRefEncoded() const { return nullptr; }
+    virtual sk_sp<const SkData> onRefEncoded() const { return nullptr; }
 
     virtual bool onAsLegacyBitmap(GrDirectContext*, SkBitmap*) const;
 
@@ -123,6 +124,7 @@ public:
         kRasterPinnable,
         kLazy,
         kLazyPicture,
+        kLazyTexture,
         kGanesh,
         kGaneshYUVA,
         kGraphite,
@@ -133,7 +135,8 @@ public:
 
     // True for picture-backed and codec-backed
     bool isLazyGenerated() const override {
-        return this->type() == Type::kLazy || this->type() == Type::kLazyPicture;
+        return this->type() == Type::kLazy || this->type() == Type::kLazyPicture ||
+               this->type() == Type::kLazyTexture;
     }
 
     bool isRasterBacked() const {
@@ -172,6 +175,12 @@ public:
         return nullptr;
     }
 
+    uint32_t getDerivedSurfaceID() const { return fDerivedSurfaceID; }
+    void setDerivedSurfaceID(uint32_t id) { fDerivedSurfaceID = id; }
+
+    SkContentID getContentID() const { return fContentID; }
+    void setContentID(SkContentID id) { fContentID = id; }
+
 protected:
     SkImage_Base(const SkImageInfo& info, uint32_t uniqueID);
 
@@ -179,6 +188,9 @@ private:
     // Set true by caches when they cache content that's derived from the current pixels.
 
     mutable std::atomic<bool> fAddedToRasterCache;
+
+    uint32_t fDerivedSurfaceID = 0;
+    SkContentID fContentID;
 };
 
 static inline SkImage_Base* as_IB(SkImage* image) {

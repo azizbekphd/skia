@@ -8,8 +8,12 @@
 #include "src/capture/SkCaptureManager.h"
 
 #include "include/core/SkCanvas.h"
-#include "include/private/base/SkDebug.h"
+#include "include/core/SkPicture.h"
+#include "include/core/SkRefCnt.h"
+#include "include/core/SkSurface.h"
+#include "src/capture/SkCapture.h"
 #include "src/capture/SkCaptureCanvas.h"
+#include "src/image/SkSurface_Base.h"
 
 #include <memory>
 
@@ -22,19 +26,49 @@ SkCanvas* SkCaptureManager::makeCaptureCanvas(SkCanvas* canvas) {
     return rawCanvasPtr;
 }
 
+SkContentID SkCaptureManager::processCanvasContent(SkCaptureCanvas* canvas) {
+    auto picture = canvas->snapPicture();
+    if (picture) {
+        uint32_t surfaceID = asSB(canvas->getBaseCanvasSurface())->getPixelStorageID();
+        SkContentID contentID = fSurfaceContentCounters[surfaceID];
+        contentID++;
+        fPictures.emplace_back(picture);
+        return contentID;
+    }
+    return SkContentID();
+}
+
 void SkCaptureManager::snapPictures() {
     for (auto& canvas : fTrackedCanvases) {
         if (canvas) {
-            auto picture = canvas->snapPicture();
-            if (picture) {
-                fPictures.emplace_back(picture);
-            }
+            processCanvasContent(canvas.get());
         }
     }
 }
 
-void SkCaptureManager::serializeCapture() {
-    // TODO (412351769): return a serialized file via SkData, for now this will print the contents
-    // of the capture for inspection.
-    SkDebugf("Tracked canvases: %d. SkPictures: %d\n", fTrackedCanvases.size(), fPictures.size());
+// TODO: make thread safe by using exchange() and a mutex.
+void SkCaptureManager::toggleCapture(bool capturing) {
+    if (capturing != fIsCurrentlyCapturing && !capturing) {
+        // on capture stop, save the capture and reset
+        this->snapPictures();
+        fLastCapture = SkCapture::MakeFromPictures(fPictures);
+        fPictures.clear();
+        fSurfaceContentCounters.clear();
+    }
+    fIsCurrentlyCapturing = capturing;
+}
+
+SkContentID SkCaptureManager::snapPicture(SkSurface* surface) {
+    for (auto& canvas : fTrackedCanvases) {
+        if (canvas) {
+            if (canvas->getBaseCanvasSurface() == surface) {
+                return processCanvasContent(canvas.get());
+            }
+        }
+    }
+    return SkContentID();
+}
+
+sk_sp<SkCapture> SkCaptureManager::getLastCapture() const {
+   return fLastCapture;
 }

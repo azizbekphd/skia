@@ -88,7 +88,7 @@ static sk_sp<SkData> create_image_data(const SkImageInfo& info) {
 
 static skgpu::graphite::TextureProxy* top_device_graphite_target_proxy(SkCanvas* canvas) {
     if (auto gpuDevice = SkCanvasPriv::TopDevice(canvas)->asGraphiteDevice()) {
-        return gpuDevice->target();
+        return gpuDevice->target().proxy();
     }
     return nullptr;
 }
@@ -208,8 +208,13 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest,
     }
     const Resource* imageResourcePtr = imageProxy->texture();
     REPORTER_ASSERT(reporter, imageResourcePtr);
-    // There is an extra resource for the buffer that is uploading the data to the texture
-    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 3);
+    // There is an extra resource for the buffer that is uploading the data to the texture. If host
+    // image copy is supported, the buffer may or may not be used based on other parameters.
+    const int buffersUsedForUpload = resourceCache->getResourceCount() - 2;
+    REPORTER_ASSERT(reporter, buffersUsedForUpload <= 1);
+    REPORTER_ASSERT(reporter,
+                    context->priv().caps()->supportsHostImageCopy() || buffersUsedForUpload == 1);
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 2 + buffersUsedForUpload);
     REPORTER_ASSERT(reporter, resourceCache->numFindableResources() == 1);
     REPORTER_ASSERT(reporter, imageResourcePtr->budgeted() == Budgeted::kNo);
 
@@ -227,10 +232,11 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest,
     imageGpu.reset();
     resourceCache->forceProcessReturnedResources();
 
-    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 3);
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 2 + buffersUsedForUpload);
     // Remapping async buffers before returning them to the cache can extend buffer lifetime.
     if (!context->priv().caps()->bufferMapsAreAsync()) {
-        REPORTER_ASSERT(reporter, resourceCache->numFindableResources() == 3);
+        REPORTER_ASSERT(reporter,
+                        resourceCache->numFindableResources() == 2 + buffersUsedForUpload);
     }
     REPORTER_ASSERT(reporter, imageResourcePtr->budgeted() == Budgeted::kYes);
 
@@ -254,10 +260,11 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteBudgetedResourcesTest,
     }
     const Resource* surfaceResourcePtr = surfaceProxy->texture();
 
-    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 4);
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 3 + buffersUsedForUpload);
     // Remapping async buffers before returning them to the cache can extend buffer lifetime.
     if (!context->priv().caps()->bufferMapsAreAsync()) {
-        REPORTER_ASSERT(reporter, resourceCache->numFindableResources() == 3);
+        REPORTER_ASSERT(reporter,
+                        resourceCache->numFindableResources() == 2 + buffersUsedForUpload);
     }
     REPORTER_ASSERT(reporter, surfaceResourcePtr->budgeted() == Budgeted::kNo);
 
@@ -564,13 +571,15 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphitePurgeNotUsedSinceResourcesTest, repor
 
     auto afterTime = force_newer_timepoint(skgpu::StdSteadyClock::now());
 
+    static constexpr std::optional<StdSteadyClock::time_point> kNoPurgingTimeLimit;
+
     // purging beforeTime should not get rid of the resource
-    resourceCache->purgeResourcesNotUsedSince(beforeTime);
+    resourceCache->purgeResourcesNotUsedSince(beforeTime, kNoPurgingTimeLimit);
 
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 1);
 
     // purging at afterTime which is after resource became purgeable should purge it.
-    resourceCache->purgeResourcesNotUsedSince(afterTime);
+    resourceCache->purgeResourcesNotUsedSince(afterTime, kNoPurgingTimeLimit);
 
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 0);
 
@@ -593,19 +602,16 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphitePurgeNotUsedSinceResourcesTest, repor
     REPORTER_ASSERT(reporter, resourceCache->testingInPurgeableQueue(resourcePtr1));
     REPORTER_ASSERT(reporter, resourceCache->testingInPurgeableQueue(resourcePtr2));
 
-    resourceCache->purgeResourcesNotUsedSince(betweenTime);
+    resourceCache->purgeResourcesNotUsedSince(betweenTime, kNoPurgingTimeLimit);
 
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 1);
     REPORTER_ASSERT(reporter, resourceCache->testingInPurgeableQueue(resourcePtr2));
 
-    resourceCache->purgeResourcesNotUsedSince(afterTime);
+    resourceCache->purgeResourcesNotUsedSince(afterTime, kNoPurgingTimeLimit);
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 0);
 
     // purgeResourcesNotUsedSince should have no impact on non-purgeable resources
-    auto resource = add_new_resource(reporter,
-                                     sharedContext,
-                                     resourceCache,
-                                     /*gpuMemorySize=*/1);
+    auto resource = add_new_resource(reporter, sharedContext, resourceCache, /*gpuMemorySize=*/1);
     if (!resource) {
         return;
     }
@@ -614,19 +620,20 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphitePurgeNotUsedSinceResourcesTest, repor
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 1);
 
     afterTime = force_newer_timepoint(skgpu::StdSteadyClock::now());
-    resourceCache->purgeResourcesNotUsedSince(afterTime);
+    resourceCache->purgeResourcesNotUsedSince(afterTime, kNoPurgingTimeLimit);
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 1);
     REPORTER_ASSERT(reporter, !resourceCache->testingInPurgeableQueue(resourcePtr));
 
     resource.reset();
     // purgeResourcesNotUsedSince should check the mailbox for the returned resource. Though the
     // time is set before that happens so nothing should purge.
-    resourceCache->purgeResourcesNotUsedSince(skgpu::StdSteadyClock::now());
+    resourceCache->purgeResourcesNotUsedSince(skgpu::StdSteadyClock::now(), kNoPurgingTimeLimit);
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 1);
     REPORTER_ASSERT(reporter, resourceCache->testingInPurgeableQueue(resourcePtr));
 
     // Now it should be purged since it is already purgeable
-    resourceCache->purgeResourcesNotUsedSince(force_newer_timepoint(skgpu::StdSteadyClock::now()));
+    resourceCache->purgeResourcesNotUsedSince(force_newer_timepoint(skgpu::StdSteadyClock::now()),
+                                              kNoPurgingTimeLimit);
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 0);
 }
 
@@ -708,7 +715,8 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphitePurgeNotUsedOverBudgetTest, reporter,
     // newer than this time so they won't be purged by the time on this call. However, since we are
     // overbudget it should trigger us to purge two of them. Since each independently fits within
     // the budget, one (unspecified) will remain the purgeable queue.
-    resourceCache->purgeResourcesNotUsedSince(timeBeforeReturningToCache);
+    resourceCache->purgeResourcesNotUsedSince(timeBeforeReturningToCache,
+                                              /*quitPurgingTime=*/std::nullopt);
     REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 1,
         "count = %d", resourceCache->getResourceCount());
     if (resourceCache->currentBudgetedBytes() == kBudget - 1) {
@@ -823,7 +831,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteScratchResourcesTest, reporter, conte
 
     REPORTER_ASSERT(reporter, key == resource->key());
     Resource* resourcePtr2 = resourceCache->findAndRefResource(
-            key, Budgeted::kYes, Shareable::kScratch, &unavailable);
+            key, Budgeted::kYes, Shareable::kScratch, /*label=*/{}, &unavailable);
     REPORTER_ASSERT(reporter, !resourcePtr2);
 
     // Return the non-shareable resource and verify that it can now be requested as scratch
@@ -832,7 +840,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteScratchResourcesTest, reporter, conte
     REPORTER_ASSERT(reporter, resourceCache->numFindableResources() == 1);
 
     resource = sk_sp(resourceCache->findAndRefResource(
-            key, Budgeted::kYes, Shareable::kScratch, &unavailable));
+            key, Budgeted::kYes, Shareable::kScratch, /*label=*/{}, &unavailable));
     REPORTER_ASSERT(reporter, resource.get() == resourcePtr);
     REPORTER_ASSERT(reporter, resource->budgeted() == Budgeted::kYes);
     REPORTER_ASSERT(reporter, resource->shareable() == Shareable::kScratch);
@@ -849,14 +857,14 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteScratchResourcesTest, reporter, conte
     // A request for another scratch resource can return the existing one if it hasn't been marked
     // unavailable in the set passed to the cache.
     resourcePtr2 = resourceCache->findAndRefResource(
-            key, Budgeted::kYes, Shareable::kScratch, &unavailable);
+            key, Budgeted::kYes, Shareable::kScratch, /*label=*/{}, &unavailable);
     REPORTER_ASSERT(reporter, resourcePtr2 == resourcePtr);
     resourcePtr2->unref();
 
     // Mark the original resource as unvailable and now it shouldn't be seen by the request.
     unavailable.add(resourcePtr);
     resourcePtr2 = resourceCache->findAndRefResource(
-            key, Budgeted::kYes, Shareable::kScratch, &unavailable);
+            key, Budgeted::kYes, Shareable::kScratch, /*label=*/{}, &unavailable);
     REPORTER_ASSERT(reporter, !resourcePtr2);
 
     // Return the scratch resource, and then simulate a threading race where there's a request for
@@ -865,7 +873,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteScratchResourcesTest, reporter, conte
     unavailable.reset();
     resource.reset();
     resource = sk_sp(resourceCache->findAndRefResource(
-            key, Budgeted::kYes, Shareable::kScratch, &unavailable));
+            key, Budgeted::kYes, Shareable::kScratch, /*label=*/{}, &unavailable));
     REPORTER_ASSERT(reporter, resource.get() == resourcePtr);
     // At this point, resourcePtr has a usage ref and should be in the return queue
     REPORTER_ASSERT(reporter, resourceCache->testingInReturnQueue(resourcePtr));
@@ -886,6 +894,98 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteScratchResourcesTest, reporter, conte
     REPORTER_ASSERT(reporter, resourcePtr2 == resourcePtr);
     REPORTER_ASSERT(reporter, resourcePtr2->shareable() == Shareable::kYes);
     resourcePtr2->unref();
+}
+
+DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(GraphiteTimeLimitedPurgeTest,
+                                   reporter,
+                                   context,
+                                   CtsEnforcement::kNextRelease) {
+    std::unique_ptr<Recorder> recorder = context->makeRecorder();
+    ResourceProvider* resourceProvider = recorder->priv().resourceProvider();
+    ResourceCache* resourceCache = resourceProvider->resourceCache();
+    const SharedContext* sharedContext = resourceProvider->sharedContext();
+
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 0);
+    REPORTER_ASSERT(reporter, resourceCache->numFindableResources() == 0);
+
+    // Add a singular purgeable resource to the cache.
+    auto resourcePtr = add_new_purgeable_resource(reporter,
+                                                  sharedContext,
+                                                  resourceCache,
+                                                  /*gpuMemorySize=*/1);
+    REPORTER_ASSERT(reporter, resourcePtr != nullptr);
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 1);
+
+
+    // Trigger the purging of the resource with an impossibly small duration limit, confirming that
+    // the resource remains in the cache.
+    static constexpr auto kZeroMs = std::chrono::milliseconds(0);
+    static constexpr auto kNoPurgingTimeLimit = std::nullopt;
+    // Before performing cleanup, force process the cache's returned resources to ensure that
+    // resources' last access times are updated.
+    resourceCache->forceProcessReturnedResources();
+    // Make sure we actually get a new time point such that resources unused in the last 0 ms
+    // actually leads to resource purging.
+    (void)force_newer_timepoint(skgpu::StdSteadyClock::now());
+    recorder->performDeferredCleanup(kZeroMs, {kZeroMs});
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 1);
+
+    // Now purge with no time limit given to actually empty out the cache.
+    resourceCache->forceProcessReturnedResources(); // Forcibly update resources' last used times
+    (void)force_newer_timepoint(skgpu::StdSteadyClock::now()); // Ensures last used times < now
+    recorder->performDeferredCleanup(kZeroMs, kNoPurgingTimeLimit);
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 0);
+
+    // Now fill up the cache with kLargeResourceCount purgeable resources.
+    static constexpr int kLargeResourceCount = 1000;
+    for (int i = 0; i < kLargeResourceCount; i++) {
+        resourcePtr = add_new_purgeable_resource(reporter,
+                                                 sharedContext,
+                                                 resourceCache,
+                                                 /*gpuMemorySize=*/1);
+        REPORTER_ASSERT(reporter, resourcePtr != nullptr);
+    }
+    // Update resources' last used times and empty out the return queue before checking cache size
+    resourceCache->forceProcessReturnedResources();
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == kLargeResourceCount);
+
+    // Record how long it takes to completely purge all kLargeResourceCount resources.
+    auto timeBeforeFullPurge = force_newer_timepoint(skgpu::StdSteadyClock::now());
+    recorder->performDeferredCleanup(kZeroMs, kNoPurgingTimeLimit);
+    auto timeAfterFullPurge = force_newer_timepoint(skgpu::StdSteadyClock::now());
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == 0);
+    auto actualFullPurgeDuration = timeAfterFullPurge - timeBeforeFullPurge;
+    REPORTER_ASSERT(reporter, actualFullPurgeDuration.count() > 0);
+
+    // Re-populate the cache.
+    for (int i = 0; i < kLargeResourceCount; i++) {
+        resourcePtr = add_new_purgeable_resource(reporter,
+                                                 sharedContext,
+                                                 resourceCache,
+                                                 /*gpuMemorySize=*/1);
+        REPORTER_ASSERT(reporter, resourcePtr != nullptr);
+    }
+    // Update resources' last used times and empty out the return queue before checking cache size
+    resourceCache->forceProcessReturnedResources();
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() == kLargeResourceCount);
+
+    // Finally, try purging with a time duration significantly smaller than the actual time recorded
+    // in the previous step. This should force only a subset of the resources to be purged.
+    auto timeBeforePartialPurge = force_newer_timepoint(skgpu::StdSteadyClock::now());
+    auto smallDuration =
+            std::chrono::duration_cast<std::chrono::microseconds>(actualFullPurgeDuration / 5);
+    recorder->performDeferredCleanup(kZeroMs, {smallDuration});
+    auto actualPartialPurgeDuration =
+            force_newer_timepoint(skgpu::StdSteadyClock::now()) - timeBeforePartialPurge;
+
+    // The actual duration should be >0. We expect resources to be purged until we have *exceeded*
+    // the duration given. However, we should be able to see that not *all* purgeable resources were
+    // purged (i.e. the stop time triggered an early exit of purging).
+    REPORTER_ASSERT(reporter, actualPartialPurgeDuration.count() > 0 &&
+                              actualPartialPurgeDuration > smallDuration);
+
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() > 0);
+    REPORTER_ASSERT(reporter, resourceCache->getResourceCount() < kLargeResourceCount);
 }
 
 }  // namespace skgpu::graphite

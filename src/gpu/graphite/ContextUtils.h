@@ -44,16 +44,6 @@ class UniquePaintParamsID;
 
 enum class Layout : uint8_t;
 
-UniquePaintParamsID ExtractPaintData(Recorder*,
-                                     FloatStorageManager* floatStorageManager,
-                                     PipelineDataGatherer* gatherer,
-                                     PaintParamsKeyBuilder* builder,
-                                     const Layout layout,
-                                     const SkM44& local2Dev,
-                                     const PaintParams&,
-                                     const Geometry& geometry,
-                                     const SkColorInfo& targetColorInfo);
-
 // Intrinsic uniforms used by every program created in Graphite.
 //
 // `viewport` should hold the actual viewport set as backend state (defining the NDC -> pixel
@@ -75,10 +65,11 @@ void CollectIntrinsicUniforms(const Caps* caps,
                               UniformManager*);
 
 // Returns whether or not hardware blending can be used. If not, we must perform a dst read within
-// the shader.
-bool CanUseHardwareBlending(const Caps*, TextureFormat, std::optional<SkBlendMode>, Coverage);
+// the shader. If an SkBlender is used instead of an SkBlendMode, it can never use hardware blending
+bool CanUseHardwareBlending(const Caps*, TextureFormat, SkBlendMode, Coverage);
 
-std::string GetPipelineLabel(const ShaderCodeDictionary*,
+std::string GetPipelineLabel(const Caps*,
+                             const ShaderCodeDictionary*,
                              const RenderPassDesc& renderPassDesc,
                              const RenderStep* renderStep,
                              UniquePaintParamsID paintID);

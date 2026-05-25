@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(example3ps, 320, 256, false, 0) {
@@ -13,13 +13,14 @@ void draw(SkCanvas* canvas) {
     canvas->save();
     canvas->scale(15, -15);
     canvas->translate(0, -28);
-    SkPath path;
-    path.moveTo(2, 2);
-    path.lineTo(3, 3);
-    path.lineTo(3, 4);
-    path.lineTo(2, 4);
-    path.lineTo(1, 5);
-    path.close();
+    SkPath path = SkPathBuilder()
+                  .moveTo(2, 2)
+                  .lineTo(3, 3)
+                  .lineTo(3, 4)
+                  .lineTo(2, 4)
+                  .lineTo(1, 5)
+                  .close()
+                  .detach();
     SkPaint p;
     p.setAntiAlias(true);
     p.setStrokeWidth(0.1f);

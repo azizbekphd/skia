@@ -23,11 +23,13 @@
 #include "include/private/base/SkTDArray.h"
 #include "src/base/SkZip.h"
 #include "src/core/SkDevice.h"
+#include "src/core/SkDraw.h"
 #include "src/core/SkDrawShadowInfo.h"
 #include "src/core/SkGlyph.h"
 #include "src/core/SkGlyphRunPainter.h"
 #include "src/core/SkLatticeIter.h"
 #include "src/core/SkMask.h"
+#include "src/core/SkMipmap.h"
 #include "src/text/GlyphRun.h"
 
 class SkBitmap;
@@ -58,7 +60,7 @@ SkOverdrawCanvas::SkOverdrawCanvas(SkCanvas* canvas)
 }
 
 namespace {
-class TextDevice : public SkNoPixelsDevice, public SkGlyphRunListPainterCPU::BitmapDevicePainter {
+class TextDevice : public SkNoPixelsDevice, public skcpu::BitmapDevicePainter {
 public:
     TextDevice(SkCanvas* overdrawCanvas, const SkSurfaceProps& props)
             : SkNoPixelsDevice{SkIRect::MakeWH(32767, 32767), props},
@@ -77,8 +79,12 @@ public:
         }
     }
 
-    void drawBitmap(const SkBitmap&, const SkMatrix&, const SkRect* dstOrNull,
-                    const SkSamplingOptions&, const SkPaint&) const override {}
+    void drawBitmap(const SkBitmap&,
+                    const SkMatrix&,
+                    const SkRect* dstOrNull,
+                    const SkSamplingOptions&,
+                    const SkPaint&,
+                    sk_sp<SkMipmap>) const override {}
 
     void onDrawGlyphRunList(SkCanvas* canvas,
                             const sktext::GlyphRunList& glyphRunList,
@@ -90,7 +96,7 @@ public:
 
 private:
     SkCanvas* const fOverdrawCanvas;
-    SkGlyphRunListPainterCPU fPainter;
+    skcpu::GlyphRunListPainter fPainter;
 };
 }  // namespace
 

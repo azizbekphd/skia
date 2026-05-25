@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google Inc.
+ * Copyright 2017 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -28,7 +28,7 @@ extern "C" {
 struct skjpeg_error_mgr : public jpeg_error_mgr {
     class AutoPushJmpBuf {
     public:
-        AutoPushJmpBuf(skjpeg_error_mgr* mgr) : fMgr(mgr) { fMgr->push(&fJmpBuf); }
+        explicit AutoPushJmpBuf(skjpeg_error_mgr* mgr) : fMgr(mgr) { fMgr->push(&fJmpBuf); }
         ~AutoPushJmpBuf()                                 { fMgr->pop(&fJmpBuf); }
         operator jmp_buf&()                               { return fJmpBuf; }
 

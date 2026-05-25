@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Google Inc.
+ * Copyright 2019 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -32,7 +32,7 @@
 #include "include/core/SkTypeface.h"
 #include "include/core/SkTypes.h"
 #include "include/effects/SkColorMatrix.h"
-#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkGradient.h"
 #include "include/effects/SkImageFilters.h"
 #include "include/effects/SkShaderMaskFilter.h"
 #include "include/private/base/SkTArray.h"
@@ -900,8 +900,11 @@ public:
     int drawTiles(SkCanvas* canvas) override {
         // Refresh the SkImage at the start, so that it's not attempted for every set entry
         if (fYUVData) {
+#if defined(SK_GANESH)
             fImage = fYUVData->refImage(canvas->recordingContext(),
                                         sk_gpu_test::LazyYUVImage::Type::kFromPixmaps);
+
+#endif
             if (!fImage) {
                 return 0;
             }
@@ -1002,9 +1005,8 @@ static ClipTileRendererArray make_solid_color_renderers() {
 
 static ClipTileRendererArray make_shader_renderers() {
     static constexpr SkPoint kPts[] = { {0.f, 0.f}, {0.25f * kTileWidth, 0.25f * kTileHeight} };
-    static constexpr SkColor kColors[] = { SK_ColorBLUE, SK_ColorWHITE };
-    auto gradient = SkGradientShader::MakeLinear(kPts, kColors, nullptr, 2,
-                                                 SkTileMode::kMirror);
+    static constexpr SkColor4f kColors[] = { SkColors::kBlue, SkColors::kWhite };
+    auto gradient = SkShaders::LinearGradient(kPts, {{kColors, {}, SkTileMode::kMirror}, {}});
 
     auto info = SkImageInfo::Make(1, 1, kAlpha_8_SkColorType, kOpaque_SkAlphaType);
     SkBitmap bm;
@@ -1034,10 +1036,10 @@ static ClipTileRendererArray make_filtered_renderers() {
     sk_sp<SkColorFilter> colorFilter = SkColorFilters::Matrix(cm);
     sk_sp<SkImageFilter> imageFilter = SkImageFilters::Dilate(8, 8, nullptr);
 
-    static constexpr SkColor kAlphas[] = { SK_ColorTRANSPARENT, SK_ColorBLACK };
-    auto alphaGradient = SkGradientShader::MakeRadial(
+    static constexpr SkColor4f kAlphas[] = { SkColors::kTransparent, SkColors::kBlack };
+    auto alphaGradient = SkShaders::RadialGradient(
             {0.5f * kTileWidth * kColCount, 0.5f * kTileHeight * kRowCount},
-            0.25f * kTileWidth * kColCount, kAlphas, nullptr, 2, SkTileMode::kClamp);
+            0.25f * kTileWidth * kColCount, {{kAlphas, {}, SkTileMode::kClamp}, {}});
     sk_sp<SkMaskFilter> maskFilter = SkShaderMaskFilter::Make(std::move(alphaGradient));
 
     return ClipTileRendererArray{

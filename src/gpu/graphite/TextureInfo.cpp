@@ -59,12 +59,12 @@ SkString TextureInfo::toString() const {
     SkASSERT(BackendApiToStr(fBackend)[0] == 'k');
     const char* backendName = BackendApiToStr(fBackend) + 1;
 
-    return SkStringPrintf("%s(viewFormat=%s,%s,bpp=%zu,sampleCount=%u,mipmapped=%d,protected=%d)",
+    return SkStringPrintf("%s(viewFormat=%s,%s,bpp=%d,sampleCount=%u,mipmapped=%d,protected=%d)",
                           backendName,
                           TextureFormatName(fViewFormat),
                           fData->toBackendString().c_str(),
                           TextureFormatBytesPerBlock(fViewFormat),
-                          fData->fSampleCount,
+                          (unsigned) fData->fSampleCount,
                           static_cast<int>(fData->fMipmapped),
                           static_cast<int>(fProtected));
 }

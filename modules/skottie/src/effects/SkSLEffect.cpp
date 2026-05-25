@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Google Inc.
+ * Copyright 2021 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -246,7 +246,7 @@ private:
             return;
         }
         sk_sp<SkShader> shader =
-                fEffect->makeShader(buildUniformData(), SkSpan(buildChildrenData(this->node())));
+                fEffect->makeShader(buildUniformData(), buildChildrenData(this->node()));
         this->node()->setShader(std::move(shader));
     }
 };

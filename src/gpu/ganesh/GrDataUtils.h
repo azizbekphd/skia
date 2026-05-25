@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 Google Inc.
+ * Copyright 2019 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -31,15 +31,5 @@ bool GrConvertPixels(const GrPixmap& dst, const GrCPixmap& src, bool flipY = fal
 
 /** Clears the dst image to a constant color. */
 bool GrClearImage(const GrImageInfo& dstInfo, void* dst, size_t dstRB, std::array<float, 4> color);
-
-#if defined(GPU_TEST_UTILS)
-/**
- * BC1 compress an image that contains only either opaque black or transparent black and one
- * other color.
- *   opaque pixmaps      -> kBC1_RGB8_UNORM
- *   transparent pixmaps -> kBC1_RGBA8_UNORM
- */
-void GrTwoColorBC1Compress(const SkPixmap& pixmap, SkColor otherColor, char* dstPixels);
-#endif
 
 #endif

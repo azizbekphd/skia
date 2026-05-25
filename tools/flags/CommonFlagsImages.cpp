@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 
 #include "src/core/SkOSFile.h"
@@ -33,12 +33,6 @@ bool CollectImages(const CommandLineFlags::StringArray& images, TArray<SkString>
         "ASTC",
         "WBMP",
         "ICO",
-#endif
-#ifdef SK_HAS_HEIF_LIBRARY
-        "heic",
-#if !defined(SK_BUILD_FOR_WIN)
-        "HEIC",
-#endif
 #endif
 #ifdef SK_CODEC_DECODES_RAW
         "arw",

@@ -1,4 +1,4 @@
-load("//bazel:skia_rules.bzl", "skia_cc_library", "skia_filegroup", "split_srcs_and_hdrs")
+load("//bazel:skia_rules.bzl", "skia_cc_library_with_testutil", "skia_filegroup", "split_srcs_and_hdrs")
 
 package(
     default_applicable_licenses = ["//:license"],
@@ -41,6 +41,7 @@ GRAPHITE_FILES = [
     "ContextPriv.h",
     "ContextUtils.cpp",
     "ContextUtils.h",
+    "DebugUtils.h",
     "DescriptorData.h",
     "Device.cpp",
     "Device.h",
@@ -51,6 +52,10 @@ GRAPHITE_FILES = [
     "DrawContext.h",
     "DrawList.cpp",
     "DrawList.h",
+    "DrawListLayer.cpp",
+    "DrawListLayer.h",
+    "DrawListTypes.h",
+    "DrawListBase.h",
     "DrawOrder.h",
     "DrawParams.h",
     "DrawPass.cpp",
@@ -65,6 +70,7 @@ GRAPHITE_FILES = [
     "GraphicsPipeline.cpp",
     "GraphicsPipeline.h",
     "GraphicsPipelineDesc.h",
+    "GraphicsPipelineHandle.h",
     "GraphiteResourceKey.cpp",
     "GraphiteResourceKey.h",
     "ImageFactories.cpp",
@@ -86,7 +92,10 @@ GRAPHITE_FILES = [
     "PaintParamsKey.h",
     "PathAtlas.cpp",
     "PathAtlas.h",
+    "PipelineCreationTask.h",
     "PipelineData.h",
+    "PipelineManager.cpp",
+    "PipelineManager.h",
     "ProxyCache.cpp",
     "ProxyCache.h",
     "QueueManager.cpp",
@@ -95,7 +104,6 @@ GRAPHITE_FILES = [
     "RasterPathAtlas.h",
     "RasterPathUtils.cpp",
     "RasterPathUtils.h",
-    "ReadSwizzle.h",
     "Recorder.cpp",
     "RecorderOptionsPriv.h",
     "RecorderPriv.h",
@@ -120,6 +128,8 @@ GRAPHITE_FILES = [
     "Sampler.h",
     "ScratchResourceManager.cpp",
     "ScratchResourceManager.h",
+    "SerializationUtils.cpp",
+    "SerializationUtils.h",
     "ShaderCodeDictionary.cpp",
     "ShaderCodeDictionary.h",
     "ShaderInfo.cpp",
@@ -134,6 +144,8 @@ GRAPHITE_FILES = [
     "Texture.h",
     "TextureFormat.cpp",
     "TextureFormat.h",
+    "TextureFormatXferFn.cpp",
+    "TextureFormatXferFn.h",
     "TextureInfo.cpp",
     "TextureInfoPriv.h",
     "TextureProxy.cpp",
@@ -141,6 +153,8 @@ GRAPHITE_FILES = [
     "TextureProxyView.h",
     "TextureUtils.cpp",
     "TextureUtils.h",
+    "ThreadSafeResourceProvider.cpp",
+    "ThreadSafeResourceProvider.h",
     "PrecompileContext.cpp",
     "PrecompileContextPriv.h",
     "Uniform.h",
@@ -168,7 +182,7 @@ skia_filegroup(
     ],
 )
 
-skia_cc_library(
+skia_cc_library_with_testutil(
     name = "graphite",
     srcs = [
         ":_graphite_srcs",
@@ -195,61 +209,28 @@ skia_cc_library(
     defines = [
         "SK_GRAPHITE",
     ],
-    visibility = [
-        "//src/gpu/graphite/mtl:__pkg__",
-        "//src/gpu/graphite/precompile:__pkg__",
-        "//src/gpu/graphite/vk:__pkg__",
-    ],
-    deps = [
-        "//:core",
-        "//src/base",
-        "//src/core:core_priv",
-        "//src/gpu",
-        "//src/sksl/codegen:gpu",
-    ],
-)
-
-skia_cc_library(
-    name = "graphite_TEST_UTIL",
-    testonly = True,
-    srcs = [
-        ":_graphite_srcs",
-        "//src/gpu/graphite/compute:compute_srcs",
-        "//src/gpu/graphite/geom:geom_srcs",
-        "//src/gpu/graphite/render:render_srcs",
-        "//src/gpu/graphite/task:task_srcs",
-        "//src/gpu/graphite/text:text_srcs",
-        "//src/sksl:sksl_graphite_modules_hdrs",
-        "//src/sksl:sksl_graphite_modules_srcs",
-        "//src/text/gpu:gpu_hdrs",
-        "//src/text/gpu:gpu_srcs",
-    ],
-    hdrs = [
-        ":_graphite_hdrs",
-        "//include/gpu:shared_gpu_hdrs",
-        "//include/gpu/graphite:public_hdrs",
-        "//src/gpu/graphite/compute:compute_hdrs",
-        "//src/gpu/graphite/geom:geom_hdrs",
-        "//src/gpu/graphite/render:render_hdrs",
-        "//src/gpu/graphite/task:task_hdrs",
-        "//src/gpu/graphite/text:text_hdrs",
-    ],
-    defines = [
-        "SK_GRAPHITE",
-        "GPU_TEST_UTILS",
-    ],
-    visibility = [
+    features = ["layering_check"],
+    priv_visibility = [
         "//dm:__pkg__",
+        "//src/gpu/graphite/dawn:__pkg__",
         "//src/gpu/graphite/mtl:__pkg__",
         "//src/gpu/graphite/precompile:__pkg__",
         "//src/gpu/graphite/vk:__pkg__",
         "//tools:__subpackages__",
     ],
+    visibility = [
+        "//src/gpu/graphite/dawn:__pkg__",
+        "//src/gpu/graphite/mtl:__pkg__",
+        "//src/gpu/graphite/precompile:__pkg__",
+        "//src/gpu/graphite/vk:__pkg__",
+    ],
     deps = [
         "//:core",
         "//src/base",
         "//src/core:core_priv",
         "//src/gpu",
+        "//src/sksl:generated_sksl",
         "//src/sksl/codegen:gpu",
+        "//src/utils:shader_utils",
     ],
 )

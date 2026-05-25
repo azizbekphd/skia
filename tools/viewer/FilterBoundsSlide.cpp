@@ -11,11 +11,12 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
+#include "include/core/SkPathBuilder.h"
 #include "include/core/SkPathEffect.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkRect.h"
 #include "include/effects/SkDashPathEffect.h"
-#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkGradient.h"
 #include "include/effects/SkImageFilters.h"
 #include "src/core/SkImageFilterTypes.h"
 #include "src/core/SkImageFilter_Base.h"
@@ -96,7 +97,7 @@ static SkPaint line_paint(SkColor color, bool dashed = false) {
 }
 
 static SkPath create_axis_path(const SkRect& rect, float axisSpace) {
-    SkPath localSpace;
+    SkPathBuilder localSpace;
     for (float y = rect.fTop + axisSpace; y <= rect.fBottom; y += axisSpace) {
         localSpace.moveTo(rect.fLeft, y);
         localSpace.lineTo(rect.fRight, y);
@@ -105,7 +106,7 @@ static SkPath create_axis_path(const SkRect& rect, float axisSpace) {
         localSpace.moveTo(x, rect.fTop);
         localSpace.lineTo(x, rect.fBottom);
     }
-    return localSpace;
+    return localSpace.detach();
 }
 
 static const SkColor4f kScaleGradientColors[] =
@@ -121,9 +122,9 @@ static const int kStopCount = (int) std::size(kScaleGradientColors);
 static void draw_scale_key(SkCanvas* canvas, float y) {
     SkRect key = SkRect::MakeXYWH(15.f, y + 30.f, 15.f, 100.f);
     SkPoint pts[] = {{key.centerX(), key.fTop}, {key.centerX(), key.fBottom}};
-    sk_sp<SkShader> gradient = SkGradientShader::MakeLinear(
-            pts, kScaleGradientColors, nullptr, kGradientStops, kStopCount, SkTileMode::kClamp,
-            SkGradientShader::kInterpolateColorsInPremul_Flag, nullptr);
+    sk_sp<SkShader> gradient = SkShaders::LinearGradient(
+            pts, {{kScaleGradientColors, kGradientStops, SkTileMode::kClamp},
+                  {SkGradient::Interpolation::InPremul::kYes}});
     SkPaint keyPaint;
     keyPaint.setShader(gradient);
     canvas->drawRect(key, keyPaint);

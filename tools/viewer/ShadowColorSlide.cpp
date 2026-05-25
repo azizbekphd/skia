@@ -1,6 +1,6 @@
 
 /*
- * Copyright 2017 Google Inc.
+ * Copyright 2017 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -42,7 +42,7 @@ public:
     }
 
     void load(SkScalar w, SkScalar h) override {
-        fRectPath.addRect(SkRect::MakeXYWH(-50, -50, 100, 100));
+        fRectPath = SkPath::Rect(SkRect::MakeXYWH(-50, -50, 100, 100));
     }
 
     bool onChar(SkUnichar uni) override {

@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(convex_overstroke_quad, 256, 256, false, 0) {
@@ -14,11 +14,12 @@ void draw(SkCanvas* canvas) {
 
     SkPoint p3 = SkPoint::Make(65, 30);
 
-    SkPath path;
-    path.moveTo(p1);
-    path.lineTo(p2);
-    path.quadTo(p3, p1);
-    // path.close();
+    SkPath path = SkPathBuilder()
+                  .moveTo(p1)
+                  .lineTo(p2)
+                  .quadTo(p3, p1)
+                //.close();
+                  .detach();
 
     SkPaint p;
     p.setColor(SK_ColorRED);

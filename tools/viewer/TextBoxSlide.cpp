@@ -14,7 +14,7 @@
 #include "include/core/SkStream.h"
 #include "include/core/SkTextBlob.h"
 #include "include/core/SkTypeface.h"
-#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkGradient.h"
 #include "modules/skshaper/include/SkShaper.h"
 #include "modules/skshaper/include/SkShaper_skunicode.h"
 #include "modules/skunicode/include/SkUnicode.h"
@@ -226,13 +226,13 @@ private:
 DEF_SLIDE(return new TextBoxSlide(SkShapers::Primitive::PrimitiveText,
                                   make_trivial_bidi,
                                   make_trivial_script_runner,
-                                  "primitive"););
+                                  "primitive");)
 
 #if defined(SK_SHAPER_CORETEXT_AVAILABLE)
-DEF_SLIDE(return new TextBoxSlide(SkShapers::CT::CoreText,
+DEF_SLIDE(return new TextBoxSlide([]() { return SkShapers::CT::CoreText(); },
                                   make_trivial_bidi,
                                   make_trivial_script_runner,
-                                  "coretext"););
+                                  "coretext");)
 #endif
 
 #if defined(SK_SHAPER_HARFBUZZ_AVAILABLE) && defined(SK_SHAPER_UNICODE_AVAILABLE)
@@ -243,7 +243,7 @@ DEF_SLIDE(return new TextBoxSlide(
                          },
                          make_unicode_bidi,
                          make_harfbuzz_script_runner,
-                         "harfbuzz"););
+                         "harfbuzz");)
 #endif
 
 class ShaperSlide : public Slide {
@@ -341,4 +341,4 @@ private:
     }
 };
 
-DEF_SLIDE( return new ShaperSlide; );
+DEF_SLIDE( return new ShaperSlide; )

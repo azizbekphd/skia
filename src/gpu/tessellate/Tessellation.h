@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Google Inc.
+ * Copyright 2021 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -109,7 +109,7 @@ constexpr size_t PatchAttribsStride(PatchAttribs attribs) {
                                                                    : sizeof(uint8_t)) * 4 : 0) +
            (attribs & PatchAttribs::kPaintDepth ? sizeof(float) : 0) +
            (attribs & PatchAttribs::kExplicitCurveType ? sizeof(float) : 0) +
-           (attribs & PatchAttribs::kSsboIndex ? (sizeof(uint32_t) * 2) : 0);
+           (attribs & PatchAttribs::kSsboIndex ? sizeof(uint32_t) : 0);
 }
 constexpr size_t PatchStride(PatchAttribs attribs) {
     return 4*sizeof(SkPoint) + PatchAttribsStride(attribs);

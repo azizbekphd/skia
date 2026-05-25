@@ -16,39 +16,48 @@
 
 namespace skgpu::graphite {
 
-bool RasterMaskHelper::init(SkISize pixmapSize, SkIVector transformedMaskOffset) {
-    if (!fPixels) {
-        return false;
-    }
+std::tuple<SkBitmap, RasterMaskHelper> RasterMaskHelper::Allocate(SkISize size,
+                                                                  SkIVector translation,
+                                                                  int padding,
+                                                                  SkAlpha initialAlpha) {
+    SkASSERT(padding >= 0);
+    SkASSERT(!size.isEmpty());
 
-    // Allocate pixmap if needed
-    if (!fPixels->addr()) {
-        const SkImageInfo bmImageInfo = SkImageInfo::MakeA8(pixmapSize);
-        if (!fPixels->tryAlloc(bmImageInfo)) {
-            return false;
-        }
-        fPixels->erase(0);
-    } else if (fPixels->dimensions() != pixmapSize) {
-        return false;
-    }
+    SkISize paddedSize{size.width() + 2 * padding, size.height() + 2 * padding};
+    SkBitmap bitmap;
+    bitmap.allocPixels(SkImageInfo::MakeA8(paddedSize));
+    memset(bitmap.getAddr(0, 0), initialAlpha, bitmap.computeByteSize());
 
-    fDraw.fBlitterChooser = SkA8Blitter_Choose;
-    fDraw.fDst = *fPixels;
-    fDraw.fRC = &fRasterClip;
-    fTransformedMaskOffset = transformedMaskOffset;
-    return true;
+    const SkPixmap outerPM = bitmap.pixmap();
+    SkPixmap innerPM;
+    SkAssertResult(outerPM.extractSubset(&innerPM, SkIRect::MakePtSize({padding, padding}, size)));
+
+    return std::make_tuple(std::move(bitmap), RasterMaskHelper{innerPM, translation});
 }
 
-void RasterMaskHelper::clear(uint8_t alpha, const SkIRect& drawBounds) {
-    fPixels->erase(SkColorSetARGB(alpha, 0xFF, 0xFF, 0xFF), drawBounds);
+RasterMaskHelper::RasterMaskHelper(SkPixmap pixmap, SkIVector translation)
+        : fPixels{pixmap}
+        , fRasterClip{SkIRect::MakeSize(pixmap.dimensions())} {
+    SkASSERT(fPixels.addr());
+    SkASSERT(!fPixels.info().dimensions().isEmpty());
+    SkASSERT(pixmap.colorType() == kAlpha_8_SkColorType);
+
+    fTranslate.fX = translation.fX;
+    fTranslate.fY = translation.fY;
+}
+
+skcpu::Draw make_draw(const SkPixmap& pm, const SkRasterClip& rc, const SkMatrix& m) {
+    skcpu::Draw draw;
+    draw.fDst = pm;
+    draw.fBlitterChooser = SkA8Blitter_Choose;
+    draw.fCTM = &m;
+    draw.fRC = &rc;
+    return draw;
 }
 
 void RasterMaskHelper::drawShape(const Shape& shape,
                                  const Transform& localToDevice,
-                                 const SkStrokeRec& strokeRec,
-                                 const SkIRect& drawBounds) {
-    fRasterClip.setRect(drawBounds);
-
+                                 const SkStrokeRec& strokeRec) {
     SkPaint paint;
     paint.setBlendMode(SkBlendMode::kSrc);  // "Replace" mode
     paint.setAntiAlias(true);
@@ -57,28 +66,18 @@ void RasterMaskHelper::drawShape(const Shape& shape,
     strokeRec.applyToPaint(&paint);
 
     SkMatrix translatedMatrix = SkMatrix(localToDevice);
-    // The atlas transform of the shape is `localToDevice` translated by the top-left offset of the
-    // drawBounds and the inverse of the base mask transform offset for the current set of shapes.
-    // We will need to translate draws so the bound's UL corner is at the origin
-    translatedMatrix.postTranslate(drawBounds.x() - fTransformedMaskOffset.x(),
-                                   drawBounds.y() - fTransformedMaskOffset.y());
+    translatedMatrix.postTranslate(fTranslate.fX, fTranslate.fY);
 
-    fDraw.fCTM = &translatedMatrix;
     // TODO: use drawRect, drawRRect, drawArc
     SkPath path = shape.asPath();
     if (path.isInverseFillType()) {
         // The shader will handle the inverse fill in this case
         path.toggleInverseFillType();
     }
-    fDraw.drawPathCoverage(path, paint);
+    make_draw(fPixels, fRasterClip, translatedMatrix).drawPathCoverage(path, paint);
 }
 
-void RasterMaskHelper::drawClip(const Shape& shape,
-                                const Transform& localToDevice,
-                                uint8_t alpha,
-                                const SkIRect& drawBounds) {
-    fRasterClip.setRect(drawBounds);
-
+void RasterMaskHelper::drawClip(const Shape& shape, const Transform& localToDevice, uint8_t alpha) {
     SkPaint paint;
     paint.setBlendMode(SkBlendMode::kSrc);  // "Replace" mode
     paint.setAntiAlias(true);
@@ -86,22 +85,18 @@ void RasterMaskHelper::drawClip(const Shape& shape,
     paint.setColor(SkColorSetARGB(alpha, 0xFF, 0xFF, 0xFF));
 
     SkMatrix translatedMatrix = SkMatrix(localToDevice);
-    // The atlas transform of the shape is `localToDevice` translated by the top-left offset of the
-    // drawBounds and the inverse of the base mask transform offset for the current set of shapes.
-    // We will need to translate draws so the bound's UL corner is at the origin
-    translatedMatrix.postTranslate(drawBounds.x() - fTransformedMaskOffset.x(),
-                                   drawBounds.y() - fTransformedMaskOffset.y());
+    translatedMatrix.postTranslate(fTranslate.fX, fTranslate.fY);
 
-    fDraw.fCTM = &translatedMatrix;
     // TODO: use drawRect, drawRRect, drawArc
     SkPath path = shape.asPath();
+    skcpu::Draw draw = make_draw(fPixels, fRasterClip, translatedMatrix);
     // Because we could be combining multiple paths into one entry we don't touch
     // the inverse fill in this case.
     if (0xFF == alpha) {
         SkASSERT(0xFF == paint.getAlpha());
-        fDraw.drawPathCoverage(path, paint);
+        draw.drawPathCoverage(path, paint);
     } else {
-        fDraw.drawPath(path, paint, nullptr, true);
+        draw.drawPath(path, paint, nullptr);
     }
 }
 
@@ -145,7 +140,7 @@ skgpu::UniqueKey GeneratePathMaskKey(const Shape& shape,
     skgpu::UniqueKey maskKey;
     {
         static const skgpu::UniqueKey::Domain kDomain = skgpu::UniqueKey::GenerateDomain();
-        int styleKeySize = 7;
+        uint16_t styleKeySize = 7;
         if (!strokeRec.isHairlineStyle() && !strokeRec.isFillStyle()) {
             // Add space for width and miter if needed
             styleKeySize += 2;
@@ -190,66 +185,56 @@ skgpu::UniqueKey GenerateClipMaskKey(uint32_t stackRecordID,
     skgpu::UniqueKey maskKey;
     // if the element list is too large we just use the stackRecordID
     if (elementsForMask->size() <= kMaxShapeCountForKey) {
-        constexpr int kXformKeySize = 5;
-        int keySize = 0;
-        bool canCreateKey = true;
-        // Iterate through to get key size and see if we can create a key at all
+        static constexpr int kXformKeySize = 5;
+        uint16_t keySize = includeBounds ? 2 : 0;
+        // Iterate through to get key size; given kMaxShapeCountForKey and Shape's own key size
+        // limitations, this should always fit safely within a 16-bit number
         for (int i = 0; i < elementsForMask->size(); ++i) {
-            int shapeKeySize = (*elementsForMask)[i]->fShape.keySize();
-            if (shapeKeySize < 0) {
-                canCreateKey = false;
-                break;
-            }
-            keySize += kXformKeySize + shapeKeySize;
+            keySize += kXformKeySize + (*elementsForMask)[i]->fShape.keySize();
         }
-        if (canCreateKey) {
-            if (includeBounds) {
-                keySize += 2;
-            }
-            skgpu::UniqueKey::Builder builder(&maskKey, kDomain, keySize,
-                                              "Clip Path Mask");
-            int elementKeyIndex = 0;
-            Rect unclippedBounds = Rect::InfiniteInverted();
-            for (int i = 0; i < elementsForMask->size(); ++i) {
-                const ClipStack::Element* element = (*elementsForMask)[i];
 
-                // Add transform key and get packed fractional translation bits
-                uint32_t fracBits = add_transform_key(&builder,
-                                                      elementKeyIndex,
-                                                      element->fLocalToDevice);
-                uint32_t opBits = static_cast<uint32_t>(element->fOp);
-                builder[elementKeyIndex + 4] = fracBits | (opBits << 16);
+        skgpu::UniqueKey::Builder builder(&maskKey, kDomain, keySize, "Clip Path Mask");
+        int elementKeyIndex = 0;
+        Rect unclippedBounds = Rect::InfiniteInverted();
+        for (int i = 0; i < elementsForMask->size(); ++i) {
+            const ClipStack::Element* element = (*elementsForMask)[i];
 
-                const Shape& shape = element->fShape;
-                shape.writeKey(&builder[elementKeyIndex + kXformKeySize],
-                               /*includeInverted=*/true);
+            // Add transform key and get packed fractional translation bits
+            uint32_t fracBits = add_transform_key(&builder,
+                                                    elementKeyIndex,
+                                                    element->fLocalToDevice);
+            uint32_t opBits = static_cast<uint32_t>(element->fOp);
+            builder[elementKeyIndex + 4] = fracBits | (opBits << 16);
 
-                elementKeyIndex += kXformKeySize + shape.keySize();
+            const Shape& shape = element->fShape;
+            shape.writeKey(&builder[elementKeyIndex + kXformKeySize],
+                            /*includeInverted=*/true);
 
-                Rect transformedBounds = element->fLocalToDevice.mapRect(element->fShape.bounds());
-                unclippedBounds.join(transformedBounds);
-            }
+            elementKeyIndex += kXformKeySize + shape.keySize();
 
-            // The keyBounds are the maskDeviceBounds relative to the full transformed mask. We use
-            // this to ensure we capture the situation where the maskDeviceBounds are equal in two
-            // cases but actually enclose different regions of the full mask due to an integer
-            // translation (which is not captured in the key) in the element transforms.
-            *keyBounds = maskDeviceBounds.makeOffset(-unclippedBounds.left(),
-                                                     -unclippedBounds.top());
-
-            if (includeBounds) {
-                SkASSERT(SkTFitsIn<int16_t>(keyBounds->left()));
-                SkASSERT(SkTFitsIn<int16_t>(keyBounds->top()));
-                SkASSERT(SkTFitsIn<int16_t>(keyBounds->right()));
-                SkASSERT(SkTFitsIn<int16_t>(keyBounds->bottom()));
-
-                builder[elementKeyIndex] = keyBounds->left() | (keyBounds->top() << 16);
-                builder[elementKeyIndex+1] = keyBounds->right() | (keyBounds->bottom() << 16);
-            }
-
-            *usesPathKey = true;
-            return maskKey;
+            Rect transformedBounds = element->fLocalToDevice.mapRect(element->fShape.bounds());
+            unclippedBounds.join(transformedBounds);
         }
+
+        // The keyBounds are the maskDeviceBounds relative to the full transformed mask. We use
+        // this to ensure we capture the situation where the maskDeviceBounds are equal in two
+        // cases but actually enclose different regions of the full mask due to an integer
+        // translation (which is not captured in the key) in the element transforms.
+        *keyBounds = maskDeviceBounds.makeOffset(-unclippedBounds.left(),
+                                                    -unclippedBounds.top());
+
+        if (includeBounds) {
+            SkASSERT(SkTFitsIn<int16_t>(keyBounds->left()));
+            SkASSERT(SkTFitsIn<int16_t>(keyBounds->top()));
+            SkASSERT(SkTFitsIn<int16_t>(keyBounds->right()));
+            SkASSERT(SkTFitsIn<int16_t>(keyBounds->bottom()));
+
+            builder[elementKeyIndex] = keyBounds->left() | (keyBounds->top() << 16);
+            builder[elementKeyIndex+1] = keyBounds->right() | (keyBounds->bottom() << 16);
+        }
+
+        *usesPathKey = true;
+        return maskKey;
     }
 
     // Either we have too many elements or at least one shape can't create a key

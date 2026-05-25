@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Miter_Limit, 384, 170, false, 0) {
@@ -10,10 +10,7 @@ void draw(SkCanvas* canvas) {
     const SkScalar strokeWidth = 20;
     SkScalar miterLimit = 1 / SkScalarSin((angle2 - angle1) / 2);
     SkScalar miterLength = strokeWidth * miterLimit;
-    SkPath path;
-    path.moveTo(pts[0]);
-    path.lineTo(pts[1]);
-    path.lineTo(pts[2]);
+    SkPath path = SkPath::Polygon(pts, false);
     SkPaint paint;  // set to default kMiter_Join
     paint.setAntiAlias(true);
     paint.setStyle(SkPaint::kStroke_Style);

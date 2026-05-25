@@ -1,12 +1,13 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_Iter_isCloseLine, 256, 256, true, 0) {
 void draw(SkCanvas* canvas) {
-   SkPath path;
-   path.moveTo(6, 7);
-   path.conicTo(1, 2, 3, 4, .5f);
-   path.close();
+   SkPath path = SkPathBuilder()
+                 .moveTo(6, 7)
+                 .conicTo(1, 2, 3, 4, .5f)
+                 .close()
+                 .detach();
    SkPath::Iter iter(path, false);
    SkPoint p[4];
    SkDebugf("1st verb is " "%s" "move\n", SkPath::kMove_Verb == iter.next(p) ? "" : "not ");

@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_addRect_2, 256, 128, false, 0) {
@@ -9,14 +9,12 @@ void draw(SkCanvas* canvas) {
     rectPaint.setAntiAlias(true);
     rectPaint.setStyle(SkPaint::kStroke_Style);
     SkPaint arrowPaint(rectPaint);
-    SkPath arrowPath;
-    arrowPath.addPoly(arrow, true);
+    SkPath arrowPath = SkPath::Polygon(arrow, true);
     arrowPaint.setPathEffect(SkPath1DPathEffect::Make(arrowPath, 176, 0,
                              SkPath1DPathEffect::kRotate_Style));
     for (auto direction : { SkPathDirection::kCW, SkPathDirection::kCCW } ) {
         for (unsigned start : { 0, 1, 2, 3 } ) {
-           SkPath path;
-           path.addRect(rect, direction, start);
+           SkPath path = SkPath::Rect(rect, direction, start);
            canvas->drawPath(path, rectPaint);
            canvas->drawPath(path, arrowPaint);
            canvas->translate(64, 0);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Google Inc.
+ * Copyright 2023 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -38,7 +38,7 @@ struct SkJpegSegment {
  */
 class SkJpegSegmentScanner {
 public:
-    SkJpegSegmentScanner(uint8_t stopMarker = kJpegMarkerEndOfImage);
+    explicit SkJpegSegmentScanner(uint8_t stopMarker = kJpegMarkerEndOfImage);
 
     bool isDone() const { return fState == State::kDone; }
     bool hadError() const { return fState == State::kError; }

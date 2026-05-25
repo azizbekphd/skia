@@ -1,10 +1,9 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(stroke_closed_degenerate_path, 256, 256, false, 0) {
 void draw(SkCanvas* canvas) {
-    SkPath path;
-    path.addRect({50.f, 50.f, 50.f, 50.f});
+    SkPath path = SkPath::Rect({50.f, 50.f, 50.f, 50.f});
 
     SkPaint joinStroke;
     joinStroke.setColor(SK_ColorGREEN);

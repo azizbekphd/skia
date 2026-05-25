@@ -14,6 +14,7 @@ licenses(["notice"])
 PRIVATE_HEADERS = [
     "SkArenaAlloc.h",
     "SkArenaAllocList.h",
+    "SkAutoLocaleSetter.h",
     "SkAutoMalloc.h",
     "SkBase64.h",
     "SkBezierCurves.h",
@@ -84,6 +85,7 @@ skia_filegroup(
         "SkDebug.cpp",
         "SkDeque.cpp",
         "SkFloatingPoint.cpp",
+        "SkLog.cpp",
         "SkQuads.cpp",
         "SkSharedMutex.cpp",
         "SkSpinlock.cpp",
@@ -107,8 +109,9 @@ skia_cc_library(
     features = ["layering_check"],
     visibility = [
         "//bench:__subpackages__",
-        "//experimental/rust_png:__subpackages__",
+        "//experimental:__subpackages__",
         "//modules:__subpackages__",
+        "//rust:__subpackages__",
         "//src:__subpackages__",
         "//tests:__subpackages__",
         "//tools:__subpackages__",

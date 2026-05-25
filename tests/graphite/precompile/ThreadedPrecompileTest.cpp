@@ -12,7 +12,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkTextBlob.h"
-#include "include/effects/SkGradientShader.h"
+#include "include/effects/SkGradient.h"
 #include "include/gpu/graphite/PrecompileContext.h"
 #include "include/gpu/graphite/Surface.h"
 #include "include/gpu/graphite/precompile/PaintOptions.h"
@@ -34,16 +34,10 @@ using namespace::skgpu::graphite;
 namespace {
 
 static constexpr int kMaxNumStops = 9;
-static constexpr SkColor gColors[kMaxNumStops] = {
-        SK_ColorRED,
-        SK_ColorGREEN,
-        SK_ColorBLUE,
-        SK_ColorCYAN,
-        SK_ColorMAGENTA,
-        SK_ColorYELLOW,
-        SK_ColorBLACK,
-        SK_ColorDKGRAY,
-        SK_ColorLTGRAY,
+static const SkColor4f gColors[kMaxNumStops] = {
+    SkColors::kRed, SkColors::kGreen, SkColors::kBlue, SkColors::kCyan,
+    SkColors::kMagenta, SkColors::kYellow, SkColors::kBlack,
+    SkColor4f::FromColor(SK_ColorDKGRAY), SkColor4f::FromColor(SK_ColorLTGRAY)
 };
 static constexpr SkPoint gPts[kMaxNumStops] = {
         { -100.0f, -100.0f },
@@ -59,70 +53,66 @@ static constexpr SkPoint gPts[kMaxNumStops] = {
 static constexpr float gOffsets[kMaxNumStops] =
             { 0.0f, 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.75f, 0.875f, 1.0f };
 
-std::pair<SkPaint, PaintOptions> linear(int numStops) {
+static SkGradient grad(size_t count) {
+    return {{{gColors, count}, {gOffsets, count}, SkTileMode::kClamp}, {}};
+}
+
+std::pair<SkPaint, PaintOptions> linear(size_t numStops) {
     SkASSERT(numStops <= kMaxNumStops);
 
     PaintOptions paintOptions;
-    paintOptions.setShaders({ PrecompileShaders::LinearGradient() });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
+    paintOptions.setShaders({{ PrecompileShaders::LinearGradient() }});
+    paintOptions.setBlendModes(SKSPAN_INIT_ONE( SkBlendMode::kSrcOver ));
 
     SkPaint paint;
-    paint.setShader(SkGradientShader::MakeLinear(gPts,
-                                                 gColors, gOffsets, numStops,
-                                                 SkTileMode::kClamp));
+    paint.setShader(SkShaders::LinearGradient(gPts, grad(numStops)));
     paint.setBlendMode(SkBlendMode::kSrcOver);
 
     return { paint, paintOptions };
 }
 
-std::pair<SkPaint, PaintOptions> radial(int numStops) {
+std::pair<SkPaint, PaintOptions> radial(size_t numStops) {
     SkASSERT(numStops <= kMaxNumStops);
 
     PaintOptions paintOptions;
-    paintOptions.setShaders({ PrecompileShaders::RadialGradient() });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
+    paintOptions.setShaders({{ PrecompileShaders::RadialGradient() }});
+    paintOptions.setBlendModes(SKSPAN_INIT_ONE( SkBlendMode::kSrcOver ));
 
     SkPaint paint;
-    paint.setShader(SkGradientShader::MakeRadial(/* center= */ {0, 0}, /* radius= */ 100,
-                                                 gColors, gOffsets, numStops,
-                                                 SkTileMode::kClamp));
+    paint.setShader(SkShaders::RadialGradient(/* center= */ {0, 0}, /* radius= */ 100,
+                                                 grad(numStops)));
     paint.setBlendMode(SkBlendMode::kSrcOver);
 
     return { paint, paintOptions };
 }
 
-std::pair<SkPaint, PaintOptions> sweep(int numStops) {
+std::pair<SkPaint, PaintOptions> sweep(size_t numStops) {
     SkASSERT(numStops <= kMaxNumStops);
 
     PaintOptions paintOptions;
-    paintOptions.setShaders({ PrecompileShaders::SweepGradient() });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
+    paintOptions.setShaders({{ PrecompileShaders::SweepGradient() }});
+    paintOptions.setBlendModes(SKSPAN_INIT_ONE( SkBlendMode::kSrcOver ));
 
     SkPaint paint;
-    paint.setShader(SkGradientShader::MakeSweep(/* cx= */ 0, /* cy= */ 0,
-                                                gColors, gOffsets, numStops,
-                                                SkTileMode::kClamp,
-                                                /* startAngle= */ 0, /* endAngle= */ 359,
-                                                /* flags= */ 0, /* localMatrix= */ nullptr));
+    paint.setShader(SkShaders::SweepGradient({0, 0}, 0, 359, grad(numStops)));
     paint.setBlendMode(SkBlendMode::kSrcOver);
 
     return { paint, paintOptions };
 }
 
-std::pair<SkPaint, PaintOptions> conical(int numStops) {
+std::pair<SkPaint, PaintOptions> conical(size_t numStops) {
     SkASSERT(numStops <= kMaxNumStops);
 
     PaintOptions paintOptions;
-    paintOptions.setShaders({ PrecompileShaders::TwoPointConicalGradient() });
-    paintOptions.setBlendModes({ SkBlendMode::kSrcOver });
+    paintOptions.setShaders({{ PrecompileShaders::TwoPointConicalGradient() }});
+    paintOptions.setBlendModes(SKSPAN_INIT_ONE( SkBlendMode::kSrcOver ));
 
     SkPaint paint;
-    paint.setShader(SkGradientShader::MakeTwoPointConical(/* start= */ {100, 100},
+    paint.setShader(SkShaders::TwoPointConicalGradient(/* start= */ {100, 100},
                                                           /* startRadius= */ 100,
                                                           /* end= */ {-100, -100},
                                                           /* endRadius= */ 100,
-                                                          gColors, gOffsets, numStops,
-                                                          SkTileMode::kClamp));
+                                                          grad(numStops)));
     paint.setBlendMode(SkBlendMode::kSrcOver);
 
     return { paint, paintOptions };
@@ -130,12 +120,19 @@ std::pair<SkPaint, PaintOptions> conical(int numStops) {
 
 // The 12 comes from 4 types of gradient times 3 combinations (i.e., 4,8,N) for each one.
 static constexpr int kNumDiffPipelines = 12;
+// Currently all PaintOptions we test have an opaque and non-opaque intrinsic, which leads to
+// two PaintOption combinations that reduce to the same PaintParamsKey. This doesn't impact the
+// number of generated pipelines but does change the cache hits.
+static constexpr int kNumOpacityVariations = 2;
+// With the current PipelineManager's behavior we expect two Pipeline Cache searches
+// per Pipeline
+static constexpr int kNumExpectedCacheSearchesPerPipeline = 2;
 
-typedef std::pair<SkPaint, PaintOptions> (*GradientCreationFunc)(int numStops);
+typedef std::pair<SkPaint, PaintOptions> (*GradientCreationFunc)(size_t numStops);
 
 struct Combo {
     GradientCreationFunc fCreateOptionsMtd;
-    int fNumStops;
+    size_t fNumStops;
 };
 
 void precompile_gradients(std::unique_ptr<PrecompileContext> precompileContext,
@@ -261,7 +258,7 @@ void compile_gradients(std::unique_ptr<Recorder> recorder,
 
     int i = 0;
     for (auto createOptionsMtd : { linear, radial, sweep, conical }) {
-        for (int numStops: { 2, 7, kMaxNumStops }) {
+        for (size_t numStops: { 2, 7, kMaxNumStops }) {
             combos[i++] = { createOptionsMtd, numStops };
         }
     }
@@ -397,18 +394,28 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ThreadedPipelinePrecompileTest,
              kDontPermute);
 
     const GlobalCache::PipelineStats stats = context->priv().globalCache()->getStats();
+    const PipelineManager::Stats& mgrStats =
+            context->priv().sharedContext()->pipelineManager()->getStats();
 
     // The 48 comes from:
     //     4 gradient flavors (linear, radial, ...) *
     //     3 types of each flavor (4, 8, N) *
     //     4 precompile threads
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheHits + stats.fGraphicsCacheMisses == 48);
+    constexpr int kExpectedPipelines = kNumDiffPipelines *
+                                       (kNumPrecompileThreads + kNumRecordingThreads);  // 48
+
     REPORTER_ASSERT(reporter, stats.fGraphicsCacheAdditions == kNumDiffPipelines);
     REPORTER_ASSERT(reporter, stats.fGraphicsRaces > 0);
     REPORTER_ASSERT(reporter, stats.fGraphicsPurges == 0);
 
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheMisses == stats.fGraphicsCacheAdditions +
-                                                            stats.fGraphicsRaces);
+    int numCacheProbes = stats.fGraphicsCacheHits + stats.fGraphicsCacheMisses;
+
+    // This test says that every expected Pipeline will incur at least one cache probe.
+    // If a task is involved then an additional cache probe is incurred. Basically, it
+    // is just checking that the Pipeline Mgr is interacting as expected with the Pipeline cache.
+    REPORTER_ASSERT(reporter, numCacheProbes == kNumOpacityVariations * kExpectedPipelines +
+                                                mgrStats.fNumTaskCreationRaces +
+                                                mgrStats.fNumTasksCreated);
 }
 
 // This test runs two threads compiling the gradient flavours and two threads
@@ -427,18 +434,29 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ThreadedPipelinePrecompileCompileTest,
              kDontPermute);
 
     const GlobalCache::PipelineStats stats = context->priv().globalCache()->getStats();
+    const PipelineManager::Stats& mgrStats =
+            context->priv().sharedContext()->pipelineManager()->getStats();
 
-    // The 48 comes from:
+    // The 72 comes from:
     //     4 gradient flavors (linear, radial, ...) *
     //     3 types of each flavor (4, 8, N) *
-    //     (2 normal-compile threads + 2 pre-compile threads)
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheHits + stats.fGraphicsCacheMisses == 48);
+    //     (2 normal-compile threads + 2 pre-compile threads * 2 opacity variations)
+    constexpr int kExpectedPipelineProbes = kNumDiffPipelines *
+                                            (kNumOpacityVariations * kNumPrecompileThreads
+                                                    + kNumRecordingThreads);  // 72
+
     REPORTER_ASSERT(reporter, stats.fGraphicsCacheAdditions == kNumDiffPipelines);
     REPORTER_ASSERT(reporter, stats.fGraphicsRaces > 0);
     REPORTER_ASSERT(reporter, stats.fGraphicsPurges == 0);
 
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheMisses == stats.fGraphicsCacheAdditions +
-                                                            stats.fGraphicsRaces);
+    int numCacheProbes = stats.fGraphicsCacheHits + stats.fGraphicsCacheMisses;
+
+    // This test says that every expected Pipeline will incur at least one cache probe.
+    // If a task is involved then an additional cache probe is incurred. Basically, it
+    // is just checking that the Pipeline Mgr is interacting as expected with the Pipeline cache
+    REPORTER_ASSERT(reporter, numCacheProbes == kExpectedPipelineProbes +
+                                                mgrStats.fNumTaskCreationRaces +
+                                                mgrStats.fNumTasksCreated);
 }
 
 // This test compiles the gradient flavors on a thread and then tests out the time-based
@@ -468,7 +486,8 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ThreadedPipelineCompilePurgingTest,
     GlobalCache::PipelineStats stats = context->priv().globalCache()->getStats();
 
     REPORTER_ASSERT(reporter, stats.fGraphicsCacheHits == 0);
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheMisses == kNumDiffPipelines);
+    REPORTER_ASSERT(reporter, stats.fGraphicsCacheMisses == kNumExpectedCacheSearchesPerPipeline *
+                                                            kNumDiffPipelines);
     REPORTER_ASSERT(reporter, stats.fGraphicsCacheAdditions == kNumDiffPipelines);
     REPORTER_ASSERT(reporter, stats.fGraphicsRaces == 0);
     // Every created Pipeline should've been used since the start of this test
@@ -484,7 +503,8 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ThreadedPipelineCompilePurgingTest,
     stats = context->priv().globalCache()->getStats();
 
     REPORTER_ASSERT(reporter, stats.fGraphicsCacheHits == 0);
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheMisses == kNumDiffPipelines);
+    REPORTER_ASSERT(reporter, stats.fGraphicsCacheMisses == kNumExpectedCacheSearchesPerPipeline *
+                                                            kNumDiffPipelines);
     REPORTER_ASSERT(reporter, stats.fGraphicsCacheAdditions == kNumDiffPipelines);
     REPORTER_ASSERT(reporter, stats.fGraphicsRaces == 0);
     // None of the created Pipelines should've been used since we started to sleep - so they
@@ -518,8 +538,12 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ThreadedPipelinePrecompilePurgingTest,
 
     GlobalCache::PipelineStats stats = context->priv().globalCache()->getStats();
 
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheHits == 0);
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheMisses == kNumDiffPipelines);
+    // Since everything was precompiled, the number of cache hits will be (opacity variations - 1)
+    // for each paint params key.
+    int expectedCacheHits = (kNumOpacityVariations - 1) * kNumDiffPipelines;
+    REPORTER_ASSERT(reporter, stats.fGraphicsCacheHits == expectedCacheHits);
+    REPORTER_ASSERT(reporter, stats.fGraphicsCacheMisses == kNumExpectedCacheSearchesPerPipeline *
+                                                            kNumDiffPipelines);
     REPORTER_ASSERT(reporter, stats.fGraphicsCacheAdditions == kNumDiffPipelines);
     REPORTER_ASSERT(reporter, stats.fGraphicsRaces == 0);
     // Precompilation doesn't count as a use so all the Pipelines will be purged even though
@@ -544,18 +568,11 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ThreadedPipelinePrecompileCompilePurgingTest,
 
     GlobalCache::PipelineStats stats = context->priv().globalCache()->getStats();
 
-    // The 48 comes from:
-    //     4 gradient flavors (linear, radial, ...) *
-    //     3 types of each flavor (4, 8, N) *
-    //     (2 normal-compile threads + 2 pre-compile threads)
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheHits + stats.fGraphicsCacheMisses == 48);
-    REPORTER_ASSERT(reporter, stats.fGraphicsCacheMisses == stats.fGraphicsCacheAdditions +
-                                                            stats.fGraphicsRaces);
+    // Given the use of both purging and permutations there is little that can be
+    // definitely tested here besides not crashing and no TSAN races.
+
     // Purges can force recreation of a Pipeline
     REPORTER_ASSERT(reporter, stats.fGraphicsCacheAdditions >= kNumDiffPipelines);
-    // Given the use of permutations it is possible, though unlikely, that there are
-    // no races (particularly on Dawn/Metal).
-    //REPORTER_ASSERT(reporter, stats.fGraphicsRaces > 0);
 }
 
 #endif // SK_GRAPHITE

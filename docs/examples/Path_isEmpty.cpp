@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_isEmpty, 256, 256, true, 0) {
@@ -8,11 +8,9 @@ void draw(SkCanvas* canvas) {
     };
     SkPath path;
     debugster("initial", path);
-    path.moveTo(0, 0);
+    path = SkPathBuilder().moveTo(0, 0).detach();
     debugster("after moveTo", path);
-    path.rewind();
-    debugster("after rewind", path);
-    path.lineTo(0, 0);
+    path = SkPathBuilder().lineTo(0, 0).detach();
     debugster("after lineTo", path);
     path.reset();
     debugster("after reset", path);

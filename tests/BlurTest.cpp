@@ -25,10 +25,9 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkSurface.h"
 #include "include/core/SkTypes.h"
+#include "include/effects/SkImageFilters.h"
 #include "include/effects/SkPerlinNoiseShader.h"
 #include "include/gpu/GpuTypes.h"
-#include "include/gpu/ganesh/GrDirectContext.h"
-#include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "include/private/base/SkTPin.h"
 #include "src/base/SkFloatBits.h"
 #include "src/base/SkMathPriv.h"
@@ -37,10 +36,20 @@
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskFilterBase.h"
 #include "src/effects/SkEmbossMaskFilter.h"
-#include "src/gpu/ganesh/GrBlurUtils.h"
 #include "tests/CtsEnforcement.h"
 #include "tests/Test.h"
 #include "tools/ToolUtils.h"
+
+#if defined(SK_GANESH)
+#include "include/gpu/ganesh/GrDirectContext.h"
+#include "include/gpu/ganesh/SkSurfaceGanesh.h"
+#include "src/gpu/ganesh/GrBlurUtils.h"
+#endif
+
+#if defined(SK_GRAPHITE)
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/Surface.h"
+#endif
 
 #include <math.h>
 #include <string.h>
@@ -48,11 +57,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
-
-#if defined(SK_GRAPHITE)
-#include "include/gpu/graphite/Context.h"
-#include "include/gpu/graphite/Surface.h"
-#endif
 
 struct GrContextOptions;
 
@@ -74,15 +78,15 @@ static void drawBG(SkCanvas* canvas) {
 
 
 struct BlurTest {
-    void (*addPath)(SkPath*);
+    SkPath (*addPath)();
     int viewLen;
     SkIRect views[9];
 };
 
 //Path Draw Procs
 //Beware that paths themselves my draw differently depending on the clip.
-static void draw50x50Rect(SkPath* path) {
-    path->addRect(0, 0, SkIntToScalar(50), SkIntToScalar(50));
+static SkPath draw50x50Rect() {
+    return SkPath::Rect({0, 0, 50, 50});
 }
 
 //Tests
@@ -143,8 +147,7 @@ DEF_TEST(BlurDrawing, reporter) {
             paint.setMaskFilter(SkMaskFilter::MakeBlur(blurStyle, sigma, respectCTM));
 
             for (size_t test = 0; test < std::size(tests); ++test) {
-                SkPath path;
-                tests[test].addPath(&path);
+                SkPath path = tests[test].addPath();
                 SkPath strokedPath = skpathutils::FillPathWithPaint(path, paint);
                 SkRect refBound = strokedPath.getBounds();
                 SkIRect iref;
@@ -320,8 +323,7 @@ DEF_TEST(BlurSigmaRange, reporter) {
 
     // The geometry is offset a smidge to trigger:
     // https://code.google.com/p/chromium/issues/detail?id=282418
-    SkPath rectPath;
-    rectPath.addRect(0.3f, 0.3f, 100.3f, 100.3f);
+    SkPath rectPath = SkPath::Rect({0.3f, 0.3f, 100.3f, 100.3f});
 
     SkPoint polyPts[] = {
         { 0.3f, 0.3f },
@@ -424,6 +426,7 @@ DEF_TEST(BlurAsABlur, reporter) {
     }
 }
 
+#if defined(SK_GANESH)
 // This exercises the problem discovered in crbug.com/570232. The return value from
 // SkBlurMask::BoxBlur wasn't being checked in SkBlurMaskFilter.cpp::GrRRectBlurEffect::Create
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SmallBoxBlurBug, reporter, ctxInfo, CtsEnforcement::kNever) {
@@ -439,7 +442,9 @@ DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(SmallBoxBlurBug, reporter, ctxInfo, CtsEn
 
     canvas->drawRRect(rr, p);
 }
+#endif
 
+#if defined(SK_GANESH)
 DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
     const SkRect r = SkRect::MakeXYWH(10, 10, 100, 100);
     static const SkScalar kBlurRad = 3.0f;
@@ -500,6 +505,7 @@ DEF_TEST(BlurredRRectNinePatchComputation, reporter) {
         REPORTER_ASSERT(reporter, SkScalarNearlyEqual(SkIntToScalar(size.fHeight), kYAns));
     }
 }
+#endif
 
 // https://crbugs.com/787712
 DEF_TEST(EmbossPerlinCrash, reporter) {
@@ -548,7 +554,7 @@ DEF_TEST(BlurZeroSigma, reporter) {
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////
-
+#if defined(SK_GANESH)
 DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(BlurMaskBiggerThanDest,
                                        reporter,
                                        ctxInfo,
@@ -593,6 +599,47 @@ DEF_TEST(zero_blur, reporter) {
 
 ///////////////////////////////////////////////////////////////////////////////////////////
 
+// b/444805331 : Fuzzer created a view matrix that did not preserveRightAngles but could still
+// result in a rect, resulting in a rect in a rrect only path.
+DEF_GANESH_TEST_FOR_RENDERING_CONTEXTS(BlurDegenerateAffineFuzzer,
+                                       reporter,
+                                       ctxInfo,
+                                       CtsEnforcement::kNever) {
+    auto context = ctxInfo.directContext();
+    SkImageInfo ii = SkImageInfo::Make(128, 128, kRGBA_8888_SkColorType, kPremul_SkAlphaType);
+    sk_sp<SkSurface> surface(SkSurfaces::RenderTarget(context, skgpu::Budgeted::kNo, ii));
+    if (!surface) {
+        ERRORF(reporter, "Could not create surface.");
+        return;
+    }
+    SkCanvas* canvas = surface->getCanvas();
+    canvas->clear(SK_ColorBLACK);
+
+    SkPaint paint;
+    paint.setColor(SK_ColorRED);
+    // Set respectCTM to false to get past the skgpu::BlurIsEffectivelyIdentity check
+    paint.setMaskFilter(SkMaskFilter::MakeBlur(kNormal_SkBlurStyle, 128.0f, /*respectCTM=*/false));
+
+    // Create a degenerate affine matrix [0 tiny 0][tiny 0 0][0 0 1]. This fails
+    // preservesRightAngles() because it's degenerate, but its 90-degree rotational structure still
+    // passes rectStaysRect().
+    const float tiny = .000001f;
+    SkMatrix matrix = SkMatrix::MakeAll(0.f,  tiny, 0.f,
+                                        tiny, 0.f,  0.f,
+                                        0.f,  0.f,  1.f);
+
+    // Verify our matrix has the magic properties
+    REPORTER_ASSERT(reporter, !matrix.preservesRightAngles());
+    REPORTER_ASSERT(reporter, matrix.rectStaysRect());
+
+    canvas->concat(matrix);
+    canvas->drawRect(SkRect::MakeWH(100.f, 100.f), paint);
+    context->flushAndSubmit();  // The test passes if no assertions are hit
+}
+#endif
+
+///////////////////////////////////////////////////////////////////////////////////////////
+
 #if defined(SK_GRAPHITE)
 
 // Reproducing integer overflow in https://g-issues.skia.org/issues/413427423
@@ -620,3 +667,41 @@ DEF_GRAPHITE_TEST_FOR_RENDERING_CONTEXTS(BlurPointCircle,
 }
 
 #endif // SK_GRAPHITE
+
+DEF_TEST(blur_b508075339, reporter) {
+    // This test verifies that eval_blur_passes correctly handles a specific edge case where
+    // the source and destination bounds do not intersect on the axis being processed.
+    //
+    // The parameters are chosen to create the following scenario:
+    // 1. A very small sigmaX (0.390625f) evaluates to a 1D blur window of 1 on the X-axis
+    //    (when SK_AVOID_SLOW_RASTER_PIPELINE_BLURS is active). A window of 1 causes the
+    //    blur engine to skip the X-pass entirely.
+    // 2. A large negative offsetX (-65.618912f) shifts the source image completely off the
+    //    left side of the 64x64 canvas.
+    // 3. Despite being off-canvas, the blur radius expands the transparent pixels just enough
+    //    that they touch the canvas boundary. This triggers padding logic (makePixelOutset)
+    //    that slightly expands the destination bounds relative to the source.
+    //
+    // Historically, skipping the X-pass combined with this artificial bounds padding meant
+    // that the starting X-coordinate for the Y-pass (loopStart) could be greater than the
+    // source image width.
+    constexpr int kCanvasSize = 64;
+    constexpr float sigmaX = 0.390625f;
+    constexpr float sigmaY = 99.609375f;
+    constexpr float offsetX = -65.618912f;
+    constexpr float offsetY = -99.999985f;
+
+    auto inner = SkImageFilters::Offset(offsetX, offsetY, nullptr);
+    auto filter = SkImageFilters::Blur(sigmaX, sigmaY, std::move(inner));
+
+    auto surface = SkSurfaces::Raster(SkImageInfo::MakeN32Premul(kCanvasSize, kCanvasSize));
+    REPORTER_ASSERT(reporter, surface);
+    SkCanvas* canvas = surface->getCanvas();
+
+    SkPaint paint;
+    paint.setImageFilter(std::move(filter));
+
+    // This drawRect triggers the image filter graph evaluation. The test passes if it
+    // completes without triggering an SkASSERT in SkBitmap::getAddr.
+    canvas->drawRect(SkRect::MakeWH(kCanvasSize, kCanvasSize), paint);
+}

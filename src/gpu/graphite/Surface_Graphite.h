@@ -35,7 +35,7 @@ public:
                                Mipmapped mipmapped = Mipmapped::kNo,
                                SkBackingFit backingFit = SkBackingFit::kExact,
                                const SkSurfaceProps* props = nullptr) {
-        return Make(recorder, info, std::move(label), budgeted, mipmapped, backingFit, props,
+        return Make(recorder, info, label, budgeted, mipmapped, backingFit, props,
                     LoadOp::kClear, /*registerWithRecorder=*/true);
     }
     // Make a surface that is not registered with the provided recorder. This surface should be
@@ -48,7 +48,7 @@ public:
                                       Budgeted budgeted = Budgeted::kYes,
                                       Mipmapped mipmapped = Mipmapped::kNo,
                                       SkBackingFit backingFit = SkBackingFit::kApprox) {
-        return Make(recorder, info, std::move(label), budgeted, mipmapped, backingFit,
+        return Make(recorder, info, label, budgeted, mipmapped, backingFit,
                     /*props=*/nullptr, LoadOp::kDiscard, /*registerWithRecorder=*/false);
     }
 
@@ -86,10 +86,20 @@ public:
     bool onCopyOnWrite(ContentChangeMode) override;
     sk_sp<const SkCapabilities> onCapabilities() override;
 
+    // May not be texturable, but includes the swizzle required when sampling or reading to CPU
+    const TextureProxyView& target() const;
+
+    uint32_t getPixelStorageID() const override;
+
     TextureProxyView readSurfaceView() const;
+
+    // Will be null if the target is not texturable.
     sk_sp<Image> asImage() const;
+    // Shares the texture but returns an Image with adjusted SkColorInfo to reflect the compatible
+    // `otherCT` and `otherAT`.
+    sk_sp<Image> asImage(SkColorType otherCT, SkAlphaType otherAT) const;
+
     sk_sp<Image> makeImageCopy(const SkIRect* subset, Mipmapped) const;
-    TextureProxy* backingTextureProxy() const;
 
     void flushToDrawContext(DrawContext*);
 

@@ -17,7 +17,13 @@
 #include "tools/gpu/vk/VkTestUtils.h"
 #include "tools/graphite/TestOptions.h"
 
+// gCreateProtectedContext lives in GrContextFactory.cpp and so isn't defined if !SK_GANESH
+#if defined(SK_GANESH)
 extern bool gCreateProtectedContext;
+static const bool& createProtectedContext = gCreateProtectedContext;
+#else
+static constexpr bool createProtectedContext = false;
+#endif
 
 namespace skiatest::graphite {
 
@@ -43,7 +49,7 @@ std::unique_ptr<GraphiteTestContext> VulkanTestContext::Make() {
                                              &debugMessenger,
                                              nullptr,
                                              sk_gpu_test::CanPresentFn(),
-                                             gCreateProtectedContext)) {
+                                             createProtectedContext)) {
         delete features;
         delete extensions;
         return nullptr;
@@ -95,15 +101,11 @@ skgpu::ContextType VulkanTestContext::contextType() {
 std::unique_ptr<skgpu::graphite::Context> VulkanTestContext::makeContext(
         const TestOptions& options) {
     SkASSERT(!options.hasDawnOptions());
-    skgpu::graphite::ContextOptions revisedContextOptions(options.fContextOptions);
-    skgpu::graphite::ContextOptionsPriv contextOptionsPriv;
-    if (!options.fContextOptions.fOptionsPriv) {
-        revisedContextOptions.fOptionsPriv = &contextOptionsPriv;
-    }
+    skiatest::graphite::TestOptions revisedOptions = options;
     // Needed to make synchronous readPixels work
-    revisedContextOptions.fOptionsPriv->fStoreContextRefInRecorder = true;
+    revisedOptions.fOptionsPriv.fStoreContextRefInRecorder = true;
     SkASSERT(fVulkan.fMemoryAllocator);
-    return skgpu::graphite::ContextFactory::MakeVulkan(fVulkan, revisedContextOptions);
+    return skgpu::graphite::ContextFactory::MakeVulkan(fVulkan, revisedOptions.fContextOptions);
 }
 
 }  // namespace skiatest::graphite

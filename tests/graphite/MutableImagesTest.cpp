@@ -22,7 +22,7 @@
 #include "src/gpu/graphite/Surface_Graphite.h"
 #include "src/gpu/graphite/Texture.h"
 #include "src/gpu/graphite/TextureProxy.h"
-#include "tests/TestUtils.h"
+#include "tests/ComparePixels.h"
 #include "tools/ToolUtils.h"
 
 using namespace skgpu::graphite;
@@ -228,7 +228,6 @@ public:
 
         fMutatingImg = SkImages::WrapTexture(fRecorder,
                                              fBETexture,
-                                             kRGBA_8888_SkColorType,
                                              kPremul_SkAlphaType,
                                              /* colorSpace= */ nullptr);
         REPORTER_ASSERT(fReporter, fMutatingImg);

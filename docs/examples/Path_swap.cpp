@@ -1,10 +1,10 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Path_swap, 256, 256, true, 0) {
 void draw(SkCanvas* canvas) {
     SkPath path1, path2;
-    path1.addRect({10, 20, 30, 40});
+    path1 = SkPath::Rect({10, 20, 30, 40});
     path1.swap(path2);
     const SkRect& b1 = path1.getBounds();
     SkDebugf("path1 bounds = %g, %g, %g, %g\n", b1.fLeft, b1.fTop, b1.fRight, b1.fBottom);

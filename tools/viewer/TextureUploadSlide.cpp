@@ -1,10 +1,13 @@
 /*
- * Copyright 2019 Google Inc. and Adobe Inc.
+ * Copyright 2019 Google LLC and Adobe Inc.
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
  */
 
+#include "tools/viewer/Slide.h"
+
+#if defined(SK_GANESH)
 #include "include/core/SkCanvas.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkSurface.h"
@@ -12,7 +15,6 @@
 #include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/SkSurfaceGanesh.h"
 #include "tools/timer/TimeUtils.h"
-#include "tools/viewer/Slide.h"
 
 using namespace skia_private;
 
@@ -45,7 +47,6 @@ public:
 
     void draw(SkCanvas* canvas) override {
         canvas->clear(0xFFFFFFFF);
-#if defined(SK_GANESH)
         auto direct = GrAsDirectContext(canvas->recordingContext());
         if (direct) {
             // One-time context-specific setup.
@@ -75,7 +76,6 @@ public:
                 }
             }
         }
-#endif
     }
 
     bool animate(double nanos) override {
@@ -153,3 +153,4 @@ private:
 
 DEF_SLIDE( return new TextureUploadSlide(); )
 
+#endif  // SK_GANESH

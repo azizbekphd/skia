@@ -52,28 +52,40 @@ void GrOpFlushState::executeDrawsAndUploadsForMeshDrawOp(
     SkASSERT(this->opsRenderPass());
 
     while (fCurrDraw != fDraws.end() && fCurrDraw->fOp == op) {
-        skgpu::AtlasToken drawToken = fTokenTracker->nextFlushToken();
+        skgpu::Token drawToken = fTokenTracker->nextFlushToken();
+
+        bool drawUploadFailure = false;
         while (fCurrUpload != fInlineUploads.end() &&
                fCurrUpload->fUploadBeforeToken == drawToken) {
-            this->opsRenderPass()->inlineUpload(this, fCurrUpload->fUpload);
+            if (!this->opsRenderPass()->inlineUpload(this, fCurrUpload->fUpload)) {
+                drawUploadFailure = true;
+            }
+            // Attempt subsequent uploads even if one fails (future draws may depend upon them).
             ++fCurrUpload;
         }
 
-        GrProgramInfo programInfo(this->caps(),
-                                  this->writeView(),
-                                  this->usesMSAASurface(),
-                                  pipeline,
-                                  userStencilSettings,
-                                  fCurrDraw->fGeometryProcessor,
-                                  fCurrDraw->fPrimitiveType,
-                                  this->renderPassBarriers(),
-                                  this->colorLoadOp());
+        // If not all of the uploads succeeded, do not attempt to execute the draw and relevant
+        // preparations. Continue on to the next draw operation (which may also fail if subsequent
+        // draw calls depended upon these uploads, but we cannot know that at this point).
+        if (drawUploadFailure) {
+            fGpu->stats()->incNumFailedDraws();
+        } else {
+            GrProgramInfo programInfo(this->caps(),
+                                      this->writeView(),
+                                      this->usesMSAASurface(),
+                                      pipeline,
+                                      userStencilSettings,
+                                      fCurrDraw->fGeometryProcessor,
+                                      fCurrDraw->fPrimitiveType,
+                                      this->renderPassBarriers(),
+                                      this->colorLoadOp());
 
-        this->bindPipelineAndScissorClip(programInfo, chainBounds);
-        this->bindTextures(programInfo.geomProc(), fCurrDraw->fGeomProcProxies,
-                           programInfo.pipeline());
-        for (int i = 0; i < fCurrDraw->fMeshCnt; ++i) {
-            this->drawMesh(fCurrDraw->fMeshes[i]);
+            this->bindPipelineAndScissorClip(programInfo, chainBounds);
+            this->bindTextures(programInfo.geomProc(), fCurrDraw->fGeomProcProxies,
+                            programInfo.pipeline());
+            for (int i = 0; i < fCurrDraw->fMeshCnt; ++i) {
+                this->drawMesh(fCurrDraw->fMeshes[i]);
+            }
         }
 
         fTokenTracker->issueFlushToken();
@@ -104,7 +116,7 @@ void GrOpFlushState::reset() {
     fASAPUploads.reset();
     fInlineUploads.reset();
     fDraws.reset();
-    fBaseDrawToken = skgpu::AtlasToken::InvalidToken();
+    fBaseDrawToken = skgpu::Token::InvalidToken();
 }
 
 void GrOpFlushState::doUpload(GrDeferredTextureUploadFn& upload,
@@ -149,12 +161,12 @@ void GrOpFlushState::doUpload(GrDeferredTextureUploadFn& upload,
     upload(wp);
 }
 
-skgpu::AtlasToken GrOpFlushState::addInlineUpload(GrDeferredTextureUploadFn&& upload) {
+skgpu::Token GrOpFlushState::addInlineUpload(GrDeferredTextureUploadFn&& upload) {
     return fInlineUploads.append(&fArena, std::move(upload), fTokenTracker->nextDrawToken())
             .fUploadBeforeToken;
 }
 
-skgpu::AtlasToken GrOpFlushState::addASAPUpload(GrDeferredTextureUploadFn&& upload) {
+skgpu::Token GrOpFlushState::addASAPUpload(GrDeferredTextureUploadFn&& upload) {
     fASAPUploads.append(&fArena, std::move(upload));
     return fTokenTracker->nextFlushToken();
 }
@@ -169,7 +181,7 @@ void GrOpFlushState::recordDraw(
     SkDEBUGCODE(fOpArgs->validate());
     bool firstDraw = fDraws.begin() == fDraws.end();
     auto& draw = fDraws.append(&fArena);
-    skgpu::AtlasToken token = fTokenTracker->issueDrawToken();
+    skgpu::Token token = fTokenTracker->issueDrawToken();
     for (int i = 0; i < geomProc->numTextureSamplers(); ++i) {
         SkASSERT(geomProcProxies && geomProcProxies[i]);
         geomProcProxies[i]->ref();

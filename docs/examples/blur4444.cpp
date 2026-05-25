@@ -1,4 +1,4 @@
-// Copyright 2020 Google LLC.
+// Copyright 2020 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(blur4444, 650, 480, false, 0) {
@@ -45,9 +45,10 @@ void draw(SkCanvas* canvas) {
     blrPaint.setColor(SkColorSetARGB(255, 247, 247, 247));
     c->drawRect(SkRect{0, 0, 640, 84}.makeOffset(0, 300), blrPaint);
 
-    static constexpr SkColor colors[]{SkColorSetARGB(255, 247, 247, 247), 0};
+    static const SkColor4f colors[]{
+        SkColor4f::FromColor(SkColorSetARGB(255, 247, 247, 247)), {0,0,0,0}};
     static constexpr SkPoint pts[]{{0.5, 0}, {256.5, 0}};
-    auto grd = SkGradientShader::MakeLinear(pts, colors, nullptr, 2, SkTileMode::kClamp);
+    auto grd = SkShaders::LinearGradient(pts, {{colors, {}, SkTileMode::kClamp}, {}});
     SkPaint grdPaint;
     grdPaint.setShader(grd);
     grdPaint.setDither(dither);

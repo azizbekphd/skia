@@ -1,12 +1,13 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 // Use of this source code is governed by a BSD-style license that can be found in the LICENSE file.
 #include "tools/fiddle/examples.h"
 REG_FIDDLE(Paint_057, 462, 256, false, 0) {
 void draw(SkCanvas* canvas) {
-    SkPath path;
-    path.moveTo(10, 50);
-    path.quadTo(35, 110, 60, 210);
-    path.quadTo(105, 110, 130, 10);
+    SkPath path = SkPathBuilder()
+                  .moveTo(10, 50)
+                  .quadTo(35, 110, 60, 210)
+                  .quadTo(105, 110, 130, 10)
+                  .detach();
     SkPaint paint;  // set to default kMiter_Join
     paint.setAntiAlias(true);
     paint.setStyle(SkPaint::kStroke_Style);

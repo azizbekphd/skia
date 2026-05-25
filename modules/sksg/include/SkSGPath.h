@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google Inc.
+ * Copyright 2017 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -26,7 +26,7 @@ class InvalidationController;
 /**
  * Concrete Geometry node, wrapping an SkPath.
  */
-class Path : public GeometryNode {
+class Path final : public GeometryNode {
 public:
     static sk_sp<Path> Make()                { return sk_sp<Path>(new Path(SkPath())); }
     static sk_sp<Path> Make(const SkPath& r) { return sk_sp<Path>(new Path(r)); }

@@ -74,6 +74,7 @@
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
 #include "src/gpu/ganesh/gradients/GrGradientShader.h"
 #include "src/gpu/ganesh/image/GrImageUtils.h"
+#include "src/gpu/ganesh/image/GrMippedBitmap.h"
 #include "src/shaders/SkBlendShader.h"
 #include "src/shaders/SkColorFilterShader.h"
 #include "src/shaders/SkColorShader.h"
@@ -100,6 +101,7 @@
 #include <optional>
 #include <utility>
 
+class GrRenderTargetProxy;
 class SkBitmap;
 enum class SkTileMode;
 
@@ -443,8 +445,9 @@ static GrFPResult make_colorfilter_fp(skgpu::ganesh::SurfaceDrawContext* sdc,
                                       std::unique_ptr<GrFragmentProcessor> inputFP,
                                       const GrColorInfo&,
                                       const SkSurfaceProps&) {
-    auto cte = ColorTableEffect::Make(std::move(inputFP), sdc->recordingContext(),
-                                      filter->bitmap());
+    SkASSERT(filter->bitmap().isImmutable());
+    auto cte = ColorTableEffect::Make(
+            std::move(inputFP), sdc->recordingContext(), GrMippedBitmap(filter->bitmap()));
     return cte ? GrFPSuccess(std::move(cte)) : GrFPFailure(nullptr);
 }
 
@@ -673,11 +676,13 @@ static std::unique_ptr<GrFragmentProcessor> make_shader_fp(const SkPerlinNoiseSh
 
     auto permutationsView = std::get<0>(GrMakeCachedBitmapProxyView(
             context,
-            permutationsBitmap,
+            GrMippedBitmap(permutationsBitmap),
             /*label=*/"PerlinNoiseShader_FragmentProcessor_PermutationsView"));
 
-    auto noiseView = std::get<0>(GrMakeCachedBitmapProxyView(
-            context, noiseBitmap, /*label=*/"PerlinNoiseShader_FragmentProcessor_NoiseView"));
+    auto noiseView = std::get<0>(
+            GrMakeCachedBitmapProxyView(context,
+                                        GrMippedBitmap(noiseBitmap),
+                                        /*label=*/"PerlinNoiseShader_FragmentProcessor_NoiseView"));
 
     if (!permutationsView || !noiseView) {
         return nullptr;
@@ -763,8 +768,11 @@ static std::unique_ptr<GrFragmentProcessor> make_shader_fp(const SkPictureShader
         if (!image) {
             return nullptr;
         }
-
-        auto [v, ct] = skgpu::ganesh::AsView(ctx, image, skgpu::Mipmapped::kNo);
+        // Images from a picture shader shouldn't ever be drawn into a surface backed by the same
+        // texture so there will never be need to make a copy of the image. So just pass in nullptr
+        // for targetSurface of the view.
+        constexpr GrRenderTargetProxy* targetSurface = nullptr;
+        auto [v, ct] = skgpu::ganesh::AsView(ctx, image, skgpu::Mipmapped::kNo, targetSurface);
         view = std::move(v);
         provider->assignUniqueKeyToProxy(key, view.asTextureProxy());
     }
@@ -869,7 +877,7 @@ static std::unique_ptr<GrFragmentProcessor> make_gradient_fp(const SkConicalGrad
     // The 2 point conical gradient can reject a pixel so it does change opacity even if the input
     // was opaque. Thus, all of these layout FPs disable that optimization.
     std::unique_ptr<GrFragmentProcessor> fp;
-    SkTLazy<SkMatrix> matrix;
+    std::optional<SkMatrix> matrix;
     switch (shader->getType()) {
         case SkConicalGradient::Type::kStrip: {
             static const SkRuntimeEffect* kEffect =
@@ -924,8 +932,8 @@ static std::unique_ptr<GrFragmentProcessor> make_gradient_fp(const SkConicalGrad
             // to have |dr| = 1, so manually compute the final gradient matrix here.
 
             // Map center to (0, 0)
-            matrix.set(SkMatrix::Translate(-shader->getStartCenter().fX,
-                                           -shader->getStartCenter().fY));
+            matrix = SkMatrix::Translate(-shader->getStartCenter().fX,
+                                         -shader->getStartCenter().fY);
             // scale |diffRadius| to 1
             matrix->postScale(1 / dr, 1 / dr);
         } break;
@@ -1022,7 +1030,7 @@ static std::unique_ptr<GrFragmentProcessor> make_gradient_fp(const SkConicalGrad
         } break;
     }
     return GrGradientShader::MakeGradientFP(
-            *shader, args, mRec, std::move(fp), matrix.getMaybeNull());
+            *shader, args, mRec, std::move(fp), SkOptAddressOrNull(matrix));
 }
 
 static std::unique_ptr<GrFragmentProcessor> make_gradient_fp(const SkLinearGradient* shader,

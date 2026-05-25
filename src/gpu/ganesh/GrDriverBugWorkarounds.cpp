@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 Google Inc.
+ * Copyright 2018 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -22,7 +22,6 @@ GrDriverBugWorkarounds::GrDriverBugWorkarounds(
 #undef GPU_OP
             default:
                 SK_ABORT("Not implemented");
-                break;
         }
     }
 }

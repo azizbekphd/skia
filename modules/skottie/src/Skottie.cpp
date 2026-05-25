@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google Inc.
+ * Copyright 2017 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -45,10 +45,6 @@
 #include <memory>
 #include <ratio>
 #include <utility>
-
-#if !defined(SK_DISABLE_LEGACY_SHAPER_FACTORY)
-#include "modules/skshaper/utils/FactoryHelpers.h"
-#endif
 
 namespace sksg {
 class Color;
@@ -181,7 +177,7 @@ AnimationBuilder::AnimationInfo AnimationBuilder::parse(const skjson::ObjectValu
     fRevalidator->setRoot(root);
     fRevalidator->revalidate();
 
-    return { std::move(root), std::move(animators), std::move(fSlotManager)};
+    return { std::move(root), std::move(animators), std::move(fSlotManager), std::move(fLayerInfo)};
 }
 
 void AnimationBuilder::parseAssets(const skjson::ArrayValue* jassets) {
@@ -414,11 +410,7 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
         return nullptr;
     }
 
-#if defined(SK_DISABLE_LEGACY_SHAPER_FACTORY)
     auto factory = fShapingFactory ? fShapingFactory : ::SkShapers::Primitive::Factory();
-#else
-    auto factory = fShapingFactory ? fShapingFactory : ::SkShapers::BestAvailable();
-#endif
     SkASSERT(resolvedProvider);
     internal::AnimationBuilder builder(std::move(resolvedProvider), fFontMgr,
                                        std::move(fPropertyObserver),
@@ -431,6 +423,7 @@ sk_sp<Animation> Animation::Builder::make(const char* data, size_t data_len) {
     auto ainfo = builder.parse(json);
 
     fSlotManager = ainfo.fSlotManager;
+    fLayerInfo = std::move(ainfo.fLayerInfo);
 
     const auto t2 = std::chrono::steady_clock::now();
     fStats.fSceneParseTimeMS = std::chrono::duration<float, std::milli>{t2-t1}.count();

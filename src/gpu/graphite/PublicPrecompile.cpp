@@ -15,8 +15,10 @@
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipeline.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
+#include "src/gpu/graphite/GraphicsPipelineHandle.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/PipelineCreationTask.h"
 #include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/PrecompileContextPriv.h"
 #include "src/gpu/graphite/PrecompileInternal.h"
@@ -25,6 +27,7 @@
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
+#include "src/gpu/graphite/TextureInfoPriv.h"
 #include "src/gpu/graphite/UniquePaintParamsID.h"
 #include "src/gpu/graphite/precompile/PaintOptionsPriv.h"
 #include "src/gpu/graphite/precompile/PrecompileColorFiltersPriv.h"
@@ -41,6 +44,7 @@ void compile(const RendererProvider* rendererProvider,
              const RenderPassDesc& renderPassDesc,
              bool withPrimitiveBlender,
              Coverage coverage) {
+
     for (const Renderer* r : rendererProvider->renderers()) {
         if (!(r->drawTypes() & drawTypes)) {
             continue;
@@ -64,15 +68,11 @@ void compile(const RendererProvider* rendererProvider,
             UniquePaintParamsID paintID = s->performsShading() ? uniqueID
                                                                : UniquePaintParamsID::Invalid();
 
-            sk_sp<GraphicsPipeline> pipeline = resourceProvider->findOrCreateGraphicsPipeline(
-                    keyContext.rtEffectDict(),
+            GraphicsPipelineHandle handle = resourceProvider->createGraphicsPipelineHandle(
                     { s->renderStepID(), paintID },
                     renderPassDesc,
                     PipelineCreationFlags::kForPrecompilation);
-            if (!pipeline) {
-                SKGPU_LOG_W("Failed to create GraphicsPipeline in precompile!");
-                return;
-            }
+            resourceProvider->startPipelineCreationTask(keyContext.rtEffectDict(), handle);
         }
     }
 }
@@ -91,7 +91,7 @@ void Precompile(PrecompileContext* precompileContext,
     ResourceProvider* resourceProvider = precompileContext->priv().resourceProvider();
     const Caps* caps = precompileContext->priv().caps();
 
-    auto rtEffectDict = std::make_unique<RuntimeEffectDictionary>();
+    sk_sp<RuntimeEffectDictionary> rtEffectDict = sk_make_sp<RuntimeEffectDictionary>();
 
     for (const RenderPassProperties& rpp : renderPassProperties) {
         // TODO: Allow the client to pass in mipmapping and protection too?
@@ -99,8 +99,11 @@ void Precompile(PrecompileContext* precompileContext,
                                                               Mipmapped::kNo,
                                                               Protected::kNo,
                                                               Renderable::kYes);
-
-        Swizzle writeSwizzle = caps->getWriteSwizzle(rpp.fDstCT, info);
+        std::optional<Swizzle> writeSwizzle = WriteSwizzleForColorType(
+                rpp.fDstCT, TextureInfoPriv::ViewFormat(info));
+        if (!writeSwizzle.has_value()) {
+            continue; // Skip generating pipelines that would never show up at runtime
+        }
 
         // TODO(robertphillips): address mismatches between the MSAA requirements of the Renderers
         // associated w/ the requested drawTypes and the specified MSAA setting
@@ -127,7 +130,7 @@ void Precompile(PrecompileContext* precompileContext,
                                          rpp.fDSFlags,
                                          /* clearColor= */ { .0f, .0f, .0f, .0f },
                                          rpp.fRequiresMSAA,
-                                         writeSwizzle,
+                                         *writeSwizzle,
                                          caps->getDstReadStrategy());
 
             SkColorInfo ci(rpp.fDstCT, kPremul_SkAlphaType, rpp.fDstCS);
@@ -139,7 +142,7 @@ void Precompile(PrecompileContext* precompileContext,
             PipelineDataGatherer gatherer(Layout::kMetal);
             PaintParamsKeyBuilder builder(dict);
             KeyContext keyContext(caps, &floatStorageManager, &builder, &gatherer, dict,
-                                  rtEffectDict.get(), ci);
+                                  rtEffectDict, ci);
 
             for (Coverage coverage : { Coverage::kNone, Coverage::kSingleChannel }) {
                 PrecompileCombinations(
@@ -162,15 +165,12 @@ void Precompile(PrecompileContext* precompileContext,
                 // pipelines.
                 const RenderStep* renderStep =
                     rendererProvider->lookup(RenderStep::RenderStepID::kCoverBounds_InverseCover);
-                sk_sp<GraphicsPipeline> pipeline = resourceProvider->findOrCreateGraphicsPipeline(
-                        keyContext.rtEffectDict(),
+
+                GraphicsPipelineHandle handle = resourceProvider->createGraphicsPipelineHandle(
                         { renderStep->renderStepID(), UniquePaintParamsID::Invalid() },
                         renderPassDesc,
                         PipelineCreationFlags::kForPrecompilation);
-                if (!pipeline) {
-                    SKGPU_LOG_W("Failed to create \"CoverBoundsRenderStep[InverseCover] + (empty)\""
-                                " precompile Pipeline!");
-                }
+                resourceProvider->startPipelineCreationTask(keyContext.rtEffectDict(), handle);
             }
 
             if (drawTypes & DrawTypeFlags::kBitmapText_Color) {
@@ -231,7 +231,7 @@ void Precompile(PrecompileContext* precompileContext,
                                                                 DrawTypeFlags::kAnalyticClip));
 
                 PaintOptions newOptions;
-                newOptions.setBlendModes({ SkBlendMode::kSrcOver });
+                newOptions.setBlendModes(SKSPAN_INIT_ONE(SkBlendMode::kSrcOver));
 
                 // Analytic
                 {
@@ -247,10 +247,10 @@ void Precompile(PrecompileContext* precompileContext,
                 // Geometric
                 {
                     sk_sp<PrecompileColorFilter> cf = PrecompileColorFilters::Compose(
-                            { PrecompileColorFilters::Blend({ SkBlendMode::kModulate }) },
-                            { PrecompileColorFiltersPriv::Gaussian() });
+                            {{ PrecompileColorFilters::Blend(SKSPAN_INIT_ONE(SkBlendMode::kModulate)) }},
+                            {{ PrecompileColorFiltersPriv::Gaussian() }});
 
-                    newOptions.setColorFilters({ std::move(cf) });
+                    newOptions.setColorFilters({{ std::move(cf) }});
                     newOptions.priv().setPrimitiveBlendMode(SkBlendMode::kDst);
                     newOptions.priv().setSkipColorXform(true);
 

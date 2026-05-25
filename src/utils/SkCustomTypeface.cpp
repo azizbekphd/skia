@@ -179,7 +179,7 @@ void SkCustomTypefaceBuilder::setGlyph(SkGlyphID index, float advance,
     rec.fAdvance  = advance;
     rec.fDrawable = std::move(drawable);
     rec.fBounds   = bounds;
-    rec.fPath.reset();
+    rec.fPath     = SkPath();
 }
 
 sk_sp<SkTypeface> SkCustomTypefaceBuilder::detach() {
@@ -488,7 +488,7 @@ sk_sp<SkTypeface> SkCustomTypefaceBuilder::Deserialize(SkStream* stream) {
 
         // The amount of bytes in the stream must be at least as big as sz, otherwise
         // sz is invalid.
-        if (StreamRemainingLengthIsBelow(stream, sz)) {
+        if (SkStreamPriv::RemainingLengthIsBelow(stream, sz)) {
             return nullptr;
         }
 

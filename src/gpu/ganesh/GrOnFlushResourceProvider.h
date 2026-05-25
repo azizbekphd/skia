@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Google Inc.
+ * Copyright 2017 Google LLC
  *
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
@@ -8,7 +8,7 @@
 #ifndef GrOnFlushResourceProvider_DEFINED
 #define GrOnFlushResourceProvider_DEFINED
 
-#include "src/gpu/AtlasTypes.h"
+#include "src/gpu/ganesh/GrAtlasTypes.h"
 
 class GrCaps;
 class GrDrawingManager;
@@ -35,7 +35,7 @@ public:
      * Called once flushing is complete. startTokenForNextFlush can be used to track resources
      * used in the current flush.
      */
-    virtual void postFlush(skgpu::AtlasToken startTokenForNextFlush) {}
+    virtual void postFlush(skgpu::Token startTokenForNextFlush) {}
 
     /**
      * Tells the callback owner to hold onto this object when freeing GPU resources.

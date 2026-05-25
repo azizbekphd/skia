@@ -14,13 +14,13 @@
 #include "include/core/SkSamplingOptions.h"
 #include "include/core/SkSpan.h"
 #include "include/core/SkTileMode.h"
-#include "include/private/base/SkTArray.h"
+#include "include/private/base/SkTDArray.h"
 #include "src/base/SkArenaAlloc.h"
 #include "src/core/SkColorData.h"
 #include "src/core/SkTHash.h"
 #include "src/gpu/graphite/BufferManager.h"
-#include "src/gpu/graphite/DrawList.h"
 #include "src/gpu/graphite/DrawTypes.h"
+#include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/shaders/gradients/SkGradientBaseShader.h"
@@ -51,6 +51,10 @@ public:
     // Wraps the finished accumulated uniform data within the manager's underlying storage.
     static UniformDataBlock Wrap(UniformManager* uniforms) {
         return UniformDataBlock(uniforms->finish());
+    }
+
+    static UniformDataBlock WrapNonShading(UniformManager* uniforms) {
+        return UniformDataBlock(uniforms->finishMarked());
     }
 
     constexpr UniformDataBlock& operator=(const UniformDataBlock&) = default;
@@ -186,6 +190,8 @@ public:
         return *index;
     }
 
+    bool contains(K data) const { return SkToBool(fDataToIndex.find(data)); }
+
     const V& lookup(Index index) const { return fIndexToData[index]; }
 
     V& lookup(Index index) { return fIndexToData[index]; }
@@ -320,6 +326,14 @@ public:
 
     TextureDataBlock lookup(Index index) const { return fTextures.lookup(index); }
 
+    bool hasTexture(const TextureProxy* texture) const {
+        // The template for TextureProxyCache uses `TextureProxy*` because `sk_sp` does not
+        // take a const pointer; this contains() check just uses the address and doesn't do
+        // anything that actually requires it to be non-const.
+        return fTextures.storage().fUniqueTextures.contains(
+                const_cast<TextureProxy*>(texture));
+    }
+
     skia_private::TArray<sk_sp<TextureProxy>> detachTextures() {
         return fTextures.storage().fUniqueTextures.detach();
     }
@@ -338,7 +352,7 @@ class PipelineDataGatherer {
 public:
     PipelineDataGatherer(Layout layout) : fUniformManager(layout) {}
 
-    // Fully resets uniforms and textures
+    // Fully resets both uniforms (paint and renderstep)and textures
     void resetForDraw() {
         fUniformManager.reset();
         fTextures.clear();
@@ -355,52 +369,46 @@ public:
 
     void checkRewind() const {
         SkASSERT(fTextures.size() == fPaintTextureCount);
-        SkASSERT(fUniformManager.isReset());
     }
 #endif // SK_DEBUG
 
-    // Mark the end of extracting paint uniforms and textures from the current draw's PaintParams.
-    UniformDataBlock endPaintData() {
-        // Save the end of the paint textures for rewind(), but return the current state of the
-        // uniforms.
-        // TODO: Once paint and renderstep uniforms are combined, endPaintData() will return void
-        // and this will just save the state of the UniformManager to rewind to.
+    // If a renderstep performs shading, then alignment should occur on the combined
+    // paint+renderstep, so no alignment is required and we simply mark the end of the paints. Else
+    // we need to align whatever is cuurrently stored to the renderstep's uniform alignment.
+    void markOffsetAndAlign(bool performsShading, int requiredAlignment) {
         fPaintTextureCount = fTextures.size();
-        return UniformDataBlock::Wrap(&fUniformManager);
-    }
-
-    // Mark the end of extract uniforms and textures from the RenderStep that will be combined with
-    // the already extracted paint data.
-    //
-    // The returned TextureDataBlock represents the list of sampled textures to be bound for the
-    // GPU draw call. If `performsShading` is true, this will be the combined set of textures for
-    // both paint and render step. If `performsShading` is false, the TextureDataBlock represents
-    // just the step's required textures.
-    //
-    // TODO: For now, the returned UniformDataBlock is always just the render step's uniforms since
-    // the paint's uniforms are returned by endPaintData(). Once uniform data is combined then the
-    // returned UniformDataBlock will follow the same pattern as the TextureDataBlock.
-    std::pair<UniformDataBlock, TextureDataBlock> endRenderStepData(bool performsShading) {
-        SkSpan<const TextureDataBlock::SampledTexture> textures{fTextures};
+        fUniformManager.markOffset();
         if (!performsShading) {
-            textures = textures.subspan(fPaintTextureCount);
+            fUniformManager.alignForNonShading(requiredAlignment);
         }
-        return {UniformDataBlock::Wrap(&fUniformManager), TextureDataBlock(textures)};
     }
 
-    // Rewind the PipelineDataGatherer to collect new uniforms and textures for another RenderStep
-    // that depends on the already extracted PaintParams uniforms and textures.
+    // Rewind to collect data for another RenderStep using the same paint data.
     void rewindForRenderStep() {
         fTextures.resize_back(fPaintTextureCount);
-        // TODO: Eventually this will not reset the uniform manager, but set its current byte offset
-        // and required alignment to what was saved in endPaintData().
-        fUniformManager.reset();
+        fUniformManager.rewindToMark();
     }
 
-    // Append a sampled texture that will be bound with a sampler matching `samplerDesc`. Textures
-    // are bound in the order that they are added to the gatherer.
+    // Mark the end of extracting uniforms and textures from a RenderStep.
+    std::pair<UniformDataBlock, TextureDataBlock> endCombinedData(bool performsShading) {
+        SkSpan<const TextureDataBlock::SampledTexture> textures{fTextures};
+        if (performsShading) {
+            // Return paint AND renderstep uniforms written since the last resetForDraw.
+            return {UniformDataBlock::Wrap(&fUniformManager), TextureDataBlock(textures)};
+        } else {
+            textures = textures.subspan(fPaintTextureCount);
+            return {UniformDataBlock::WrapNonShading(&fUniformManager), TextureDataBlock(textures)};
+        }
+    }
+
+    // Append a sampled texture.
     void add(sk_sp<TextureProxy> proxy, const SamplerDesc& samplerDesc) {
         fTextures.push_back({std::move(proxy), samplerDesc});
+    }
+
+    void tryShrinkCapacity() {
+        SkDEBUGCODE(this->checkReset());
+        fUniformManager.tryShrinkCapacity();
     }
 
     // Mimic the type-safe API available in UniformManager
@@ -410,24 +418,18 @@ public:
     template <typename T> void writeHalfArray(SkSpan<const T> t) {
         fUniformManager.writeHalfArray(t);
     }
-
     void write(const Uniform& u, const void* data) { fUniformManager.write(u, data); }
-
     void writePaintColor(const SkPMColor4f& color) { fUniformManager.writePaintColor(color); }
-
     void beginStruct(int baseAligment) { fUniformManager.beginStruct(baseAligment); }
     void endStruct() { fUniformManager.endStruct(); }
 
+    SkDEBUGCODE(UniformManager* uniformManager() { return &fUniformManager; })
 private:
     SkDEBUGCODE(friend class UniformExpectationsValidator;)
 
-    // Uniforms and textures are reset between draws but the PipelineDataGatherer is responsible
-    // for combining one set of extracted "paint" uniforms+textures with N "renderstep" uniforms
-    // and textures.
-    // TODO: Right now paint uniforms and renderstep uniforms are bound separately so rewind() only
-    // applies to the textures.
     UniformManager fUniformManager;
     skia_private::TArray<TextureDataBlock::SampledTexture> fTextures;
+
     int fPaintTextureCount = 0;
 };
 
@@ -436,22 +438,22 @@ class UniformExpectationsValidator {
 public:
     UniformExpectationsValidator(PipelineDataGatherer* gatherer,
                                  SkSpan<const Uniform> expectedUniforms,
-                                 bool isSubstruct=false)
-            : fGatherer(gatherer) {
-        fGatherer->fUniformManager.setExpectedUniforms(expectedUniforms, isSubstruct);
+                                 bool isSubstruct = false)
+            : fManager(gatherer->uniformManager()) {
+        fManager->setExpectedUniforms(expectedUniforms, isSubstruct);
     }
 
     ~UniformExpectationsValidator() {
-        fGatherer->fUniformManager.doneWithExpectedUniforms();
+        fManager->doneWithExpectedUniforms();
     }
 
 private:
-    PipelineDataGatherer* fGatherer;
+    UniformManager* fManager;
 
-    UniformExpectationsValidator(UniformExpectationsValidator &&) = delete;
-    UniformExpectationsValidator(const UniformExpectationsValidator &) = delete;
-    UniformExpectationsValidator &operator=(UniformExpectationsValidator &&) = delete;
-    UniformExpectationsValidator &operator=(const UniformExpectationsValidator &) = delete;
+    UniformExpectationsValidator(UniformExpectationsValidator&&) = delete;
+    UniformExpectationsValidator(const UniformExpectationsValidator&) = delete;
+    UniformExpectationsValidator& operator=(UniformExpectationsValidator&&) = delete;
+    UniformExpectationsValidator& operator=(const UniformExpectationsValidator&) = delete;
 };
 #endif // SK_DEBUG
 
@@ -486,8 +488,8 @@ public:
     bool finalize(DrawBufferManager* bufferMgr) {
         SkASSERT(!this->isFinalized());
         if (!fGradientStorage.empty()) {
-            auto [writer, bufferInfo] = bufferMgr->getSsboWriter(fGradientStorage.size(),
-                                                                 sizeof(float));
+            auto [writer, bufferInfo, _] =
+                    bufferMgr->getMappedStorageBuffer(fGradientStorage.size(), sizeof(float));
             if (writer) {
                 writer.write(fGradientStorage.data(), fGradientStorage.size_bytes());
                 fBufferInfo = bufferInfo;

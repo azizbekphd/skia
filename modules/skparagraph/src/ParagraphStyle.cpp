@@ -1,4 +1,4 @@
-// Copyright 2019 Google LLC.
+// Copyright 2019 Google LLC
 
 #include "modules/skparagraph/include/DartTypes.h"
 #include "modules/skparagraph/include/ParagraphStyle.h"
@@ -27,6 +27,7 @@ ParagraphStyle::ParagraphStyle() {
     fTextHeightBehavior = TextHeightBehavior::kAll;
     fHintingIsOn = true;
     fReplaceTabCharacters = false;
+    fFakeMissingFontStyles = true;
 }
 
 TextAlign ParagraphStyle::effective_align() const {

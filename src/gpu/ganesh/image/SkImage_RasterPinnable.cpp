@@ -20,6 +20,7 @@
 #include "src/gpu/ganesh/GrSurfaceProxyView.h"
 #include "src/gpu/ganesh/SkGr.h"
 #include "src/gpu/ganesh/image/GrImageUtils.h"
+#include "src/gpu/ganesh/image/GrMippedBitmap.h"
 #include "src/image/SkImage_Base.h"
 
 #include <memory>
@@ -65,6 +66,9 @@ namespace skgpu::ganesh {
 
 bool PinAsTexture(GrRecordingContext* rContext, SkImage* img) {
     auto ib = as_IB(img);
+    if (ib->type() == SkImage_Base::Type::kLazyTexture) {
+        return true;
+    }
     if (ib->type() != SkImage_Base::Type::kRasterPinnable) {
         // Cannot pin images which are not of subclass SkImage_RasterPinnable
         return false;
@@ -74,7 +78,7 @@ bool PinAsTexture(GrRecordingContext* rContext, SkImage* img) {
         auto data = std::make_unique<PinnedData>();
         std::tie(data->fPinnedView, data->fPinnedColorType) =
                 GrMakeCachedBitmapProxyView(rContext,
-                                            raster->bitmap(),
+                                            GrMippedBitmap(raster->bitmap(), raster->refMips()),
                                             /*label=*/"ganesh_PinAsTexture",
                                             skgpu::Mipmapped::kNo);
         if (!data->fPinnedView) {

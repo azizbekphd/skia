@@ -15,6 +15,7 @@
 #include "src/base/SkUTF.h"
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -199,15 +200,15 @@ class SKUNICODE_API SkUnicode : public SkRefCnt {
         static bool extractUtfConversionMapping(SkSpan<const char> utf8, Appender8&& appender8, Appender16&& appender16) {
             size_t size8 = 0;
             size_t size16 = 0;
-            auto ptr = utf8.begin();
-            auto end = utf8.end();
+            auto ptr = utf8.data();
+            auto end = ptr + utf8.size();
             while (ptr < end) {
 
-                size_t index = SkToSizeT(ptr - utf8.begin());
+                size_t index = SkToSizeT(ptr - utf8.data());
                 SkUnichar u = SkUTF::NextUTF8(&ptr, end);
 
                 // All UTF8 code units refer to the same codepoint
-                size_t next = SkToSizeT(ptr - utf8.begin());
+                size_t next = SkToSizeT(ptr - utf8.data());
                 for (auto i = index; i < next; ++i) {
                     //fUTF16IndexForUTF8Index.emplace_back(fUTF8IndexForUTF16Index.size());
                     appender16(size8);
@@ -277,7 +278,10 @@ class SKUNICODE_API SkUnicode : public SkRefCnt {
 
             SkBidiIterator::Position pos16 = 0;
             while (pos16 <= iter->getLength()) {
-                uint16_t nextPos16 = start16 - utf16;
+                const auto nextPos16 = SkTo<SkBidiIterator::Position>(start16 - utf16);
+                // The pointer difference is bound by utf16Units, and cannot overflow nextPos16.
+                static_assert(std::numeric_limits<decltype(utf16Units)>::max() <=
+                              std::numeric_limits<decltype(nextPos16)>::max());
                 auto level = iter->getLevelAt(nextPos16);
                 if (nextPos16 == 0) {
                     currentLevel = level;

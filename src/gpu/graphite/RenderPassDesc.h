@@ -25,9 +25,7 @@ struct AttachmentDesc {
     TextureFormat fFormat = TextureFormat::kUnsupported;
     LoadOp fLoadOp = LoadOp::kDiscard;
     StoreOp fStoreOp = StoreOp::kDiscard;
-    // NOTE: GPU-supported sample counts should always fit in a byte, and this lets AttachmentDesc
-    // stay at 32-bits given the backing types of TextureFormat and Load/StoreOp.
-    uint8_t fSampleCount = 1;
+    SampleCount fSampleCount = SampleCount::k1;
 
     bool operator==(const AttachmentDesc& other) const {
         if (fFormat == TextureFormat::kUnsupported &&
@@ -79,10 +77,10 @@ struct RenderPassDesc {
 
     // The write swizzle is applied in shader, so affects SkSL code generation, but is determined by
     // the desired SkColorType semantics and target TextureFormat combination of the render pass.
-    Swizzle fWriteSwizzle;
+    Swizzle fWriteSwizzle = Swizzle::RGBA();
 
     // The overall sample count of the render pass
-    uint8_t fSampleCount;
+    SampleCount fSampleCount = SampleCount::k1;
 
     // The remaining fields are set on renderpasses, but don't change the structure of the pass.
 
@@ -90,9 +88,9 @@ struct RenderPassDesc {
     // within the renderpass require a dst read, this is set to be kNoneRequired. If any draw does
     // read from the dst, then each pipeline used by this RP independently determines if a dst read
     // is needed. When required, this strategy determines how to perform it.
-    DstReadStrategy fDstReadStrategy;
+    DstReadStrategy fDstReadStrategy = DstReadStrategy::kNoneRequired;
 
-    std::array<float, 4> fClearColor;
+    std::array<float, 4> fClearColor = {0.f, 0.f, 0.f, 0.f};
     float fClearDepth = 0.f;
     uint32_t fClearStencil = 0;
 
