@@ -249,7 +249,7 @@ echo "Compiling"
   skia_enable_ganesh=${ENABLE_GANESH} \
   skia_enable_graphite=${ENABLE_GRAPHITE} \
   skia_build_for_debugger=${DEBUGGER_ENABLED} \
-  skia_enable_skottie=${ENABLE_SKOTTIE} \
+  skia_enable_skottie=false \
   \
   ${GN_SHAPER} \
   ${GN_FONT} \
