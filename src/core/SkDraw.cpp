@@ -8,6 +8,8 @@
 #include "src/core/SkDraw.h"
 
 #include "include/core/SkBitmap.h"
+#include "include/core/SkBlendMode.h"
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
@@ -17,6 +19,7 @@
 #include "include/core/SkRegion.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkTileMode.h"
+#include "include/core/SkUnPreMultiply.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkFixed.h"
@@ -27,7 +30,10 @@
 #include "src/base/SkArenaAlloc.h"
 #include "src/base/SkTLazy.h"
 #include "src/core/SkAutoBlitterChoose.h"
+#include "src/core/SkBlitRow.h"
 #include "src/core/SkBlitter.h"
+#include "src/core/SkColorSpacePriv.h"
+#include "src/core/SkColorPriv.h"
 #include "src/core/SkDrawTypes.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "src/core/SkImagePriv.h"
@@ -35,6 +41,8 @@
 #include "src/core/SkRasterClip.h"
 #include "src/core/SkRectPriv.h"
 #include "src/core/SkScan.h"
+#include <algorithm>
+#include <cstring>
 #include <optional>
 
 #if defined(SK_SUPPORT_LEGACY_ALPHA_BITMAP_AS_COVERAGE)
@@ -317,6 +325,233 @@ static bool clipHandlesSprite(const SkRasterClip& clip, int x, int y, const SkPi
     return clip.isBW() || clip.quickContains(SkIRect::MakeXYWH(x, y, pmap.width(), pmap.height()));
 }
 
+static bool color_spaces_are_fast_path_compatible(const SkColorSpace* src, const SkColorSpace* dst) {
+    if (!src) {
+        src = sk_srgb_singleton();
+    }
+    if (!dst) {
+        dst = src;
+    }
+    return SkColorSpace::Equals(src, dst);
+}
+
+static SkPMColor load_8888_as_pmcolor(uint32_t c, SkColorType colorType, SkAlphaType alphaType) {
+    SkASSERT(colorType == kRGBA_8888_SkColorType || colorType == kBGRA_8888_SkColorType);
+
+    U8CPU r, g, b, a;
+    if (colorType == kRGBA_8888_SkColorType) {
+        r = (c >> SK_RGBA_R32_SHIFT) & 0xFF;
+        g = (c >> SK_RGBA_G32_SHIFT) & 0xFF;
+        b = (c >> SK_RGBA_B32_SHIFT) & 0xFF;
+        a = (c >> SK_RGBA_A32_SHIFT) & 0xFF;
+    } else {
+        r = (c >> SK_BGRA_R32_SHIFT) & 0xFF;
+        g = (c >> SK_BGRA_G32_SHIFT) & 0xFF;
+        b = (c >> SK_BGRA_B32_SHIFT) & 0xFF;
+        a = (c >> SK_BGRA_A32_SHIFT) & 0xFF;
+    }
+
+    return alphaType == kUnpremul_SkAlphaType ? SkPremultiplyARGBInline(a, r, g, b)
+                                              : SkPackARGB32(a, r, g, b);
+}
+
+static uint32_t load_8888_as_unpremul_n32(uint32_t c, SkColorType colorType, SkAlphaType alphaType) {
+    SkASSERT(colorType == kRGBA_8888_SkColorType || colorType == kBGRA_8888_SkColorType);
+
+    U8CPU r, g, b, a;
+    if (colorType == kRGBA_8888_SkColorType) {
+        r = (c >> SK_RGBA_R32_SHIFT) & 0xFF;
+        g = (c >> SK_RGBA_G32_SHIFT) & 0xFF;
+        b = (c >> SK_RGBA_B32_SHIFT) & 0xFF;
+        a = (c >> SK_RGBA_A32_SHIFT) & 0xFF;
+    } else {
+        r = (c >> SK_BGRA_R32_SHIFT) & 0xFF;
+        g = (c >> SK_BGRA_G32_SHIFT) & 0xFF;
+        b = (c >> SK_BGRA_B32_SHIFT) & 0xFF;
+        a = (c >> SK_BGRA_A32_SHIFT) & 0xFF;
+    }
+
+    if (alphaType == kPremul_SkAlphaType) {
+        SkColor unpremul = SkUnPreMultiply::PMColorToColor(SkPackARGB32(a, r, g, b));
+        return SkPackARGB32(SkColorGetA(unpremul), SkColorGetR(unpremul),
+                            SkColorGetG(unpremul), SkColorGetB(unpremul));
+    }
+    return SkPackARGB32(a, r, g, b);
+}
+
+static bool fast_scale_bitmap_nearest_32(const SkPixmap& dst,
+                                         const SkRasterClip& clip,
+                                         const SkBitmap& bitmap,
+                                         const SkMatrix& matrix,
+                                         const SkSamplingOptions& sampling,
+                                         const SkPaint& paint) {
+    if (sampling != SkSamplingOptions()) {
+        return false;
+    }
+    if (paint.isAntiAlias()) {
+        return false;
+    }
+    if (paint.getShader()) {
+        return false;
+    }
+    if (paint.getMaskFilter()) {
+        return false;
+    }
+    if (paint.getColorFilter()) {
+        return false;
+    }
+    if (paint.getImageFilter()) {
+        return false;
+    }
+    if (paint.getAlpha() != 0xFF) {
+        return false;
+    }
+    if (clip.clipShader()) {
+        return false;
+    }
+
+    std::optional<SkBlendMode> mode = paint.asBlendMode();
+    if (!mode || (*mode != SkBlendMode::kSrc && *mode != SkBlendMode::kSrcOver)) {
+        return false;
+    }
+
+    SkPixmap src;
+    if (!bitmap.peekPixels(&src)) {
+        return false;
+    }
+    if (dst.colorType() != kN32_SkColorType) {
+        return false;
+    }
+    if (src.colorType() != kN32_SkColorType &&
+        src.colorType() != kRGBA_8888_SkColorType &&
+        src.colorType() != kBGRA_8888_SkColorType) {
+        return false;
+    }
+    if (!color_spaces_are_fast_path_compatible(src.colorSpace(), dst.colorSpace())) {
+        return false;
+    }
+
+    if (matrix.getType() & ~(SkMatrix::kScale_Mask | SkMatrix::kTranslate_Mask)) {
+        return false;
+    }
+
+    const float scaleX = matrix.getScaleX();
+    const float scaleY = matrix.getScaleY();
+    if (!(scaleX > 0.0f && scaleY > 0.0f)) {
+        return false;
+    }
+
+    SkRect dstRect;
+    matrix.mapRect(&dstRect, SkRect::MakeIWH(src.width(), src.height()));
+    if (!dstRect.isFinite() || dstRect.isEmpty()) {
+        return false;
+    }
+    if (!SkScalarIsInt(dstRect.fLeft) ||
+        !SkScalarIsInt(dstRect.fTop) ||
+        !SkScalarIsInt(dstRect.fRight) ||
+        !SkScalarIsInt(dstRect.fBottom)) {
+        return false;
+    }
+
+    SkIRect drawBounds = {
+        SkScalarRoundToInt(dstRect.fLeft),
+        SkScalarRoundToInt(dstRect.fTop),
+        SkScalarRoundToInt(dstRect.fRight),
+        SkScalarRoundToInt(dstRect.fBottom),
+    };
+    if (!drawBounds.intersect(SkIRect::MakeWH(dst.width(), dst.height())) ||
+        clip.quickReject(drawBounds)) {
+        return true;
+    }
+
+    const float invScaleX = 1.0f / scaleX;
+    const float invScaleY = 1.0f / scaleY;
+    const float translateX = matrix.getTranslateX();
+    const float translateY = matrix.getTranslateY();
+    const int srcMaxX = src.width() - 1;
+    const int srcMaxY = src.height() - 1;
+    const bool dstStoresUnpremul = dst.alphaType() == kUnpremul_SkAlphaType;
+    const bool srcMatchesDst = !dstStoresUnpremul &&
+                               src.colorType() == dst.colorType() &&
+                               src.alphaType() != kUnpremul_SkAlphaType;
+    const bool copySource = *mode == SkBlendMode::kSrc || bitmap.isOpaque();
+    SkBlitRow::Proc32 srcOver = SkBlitRow::Factory32(SkBlitRow::kSrcPixelAlpha_Flag32);
+
+    auto readSrc = [&](int x, int y) {
+        uint32_t s = *src.addr32(x, y);
+        if (dstStoresUnpremul) {
+            return copySource ? load_8888_as_unpremul_n32(s, src.colorType(), src.alphaType())
+                              : load_8888_as_pmcolor(s, src.colorType(), src.alphaType());
+        }
+        return srcMatchesDst ? s : load_8888_as_pmcolor(s, src.colorType(), src.alphaType());
+    };
+
+    auto srcOverUnpremulDst = [&](uint32_t srcPM, uint32_t dstUnpremul) {
+        uint32_t dstPM = load_8888_as_pmcolor(dstUnpremul, dst.colorType(), dst.alphaType());
+        uint32_t resultPM = SkPMSrcOver(srcPM, dstPM);
+        return load_8888_as_unpremul_n32(resultPM, dst.colorType(), kPremul_SkAlphaType);
+    };
+
+    auto blitRect = [&](const SkIRect& rect) {
+        SkIRect clipped = rect;
+        if (!clipped.intersect(drawBounds)) {
+            return;
+        }
+
+        for (int y = clipped.fTop; y < clipped.fBottom; ++y) {
+            int sy = SkScalarFloorToInt((y + 0.5f - translateY) * invScaleY);
+            sy = std::min(std::max(sy, 0), srcMaxY);
+
+            uint32_t* d = dst.writable_addr32(clipped.fLeft, y);
+            const size_t count = clipped.width();
+
+            if (scaleX == 1.0f) {
+                int sx = SkScalarFloorToInt((clipped.fLeft + 0.5f - translateX) * invScaleX);
+                sx = std::min(std::max(sx, 0), srcMaxX);
+                const uint32_t* s = src.addr32(sx, sy);
+                if (srcMatchesDst && copySource) {
+                    std::memcpy(d, s, count * sizeof(uint32_t));
+                } else if (srcMatchesDst) {
+                    srcOver(d, s, SkToInt(count), 255);
+                } else {
+                    for (int x = clipped.fLeft; x < clipped.fRight; ++x) {
+                        uint32_t loaded = dstStoresUnpremul && copySource
+                                ? load_8888_as_unpremul_n32(*s++, src.colorType(), src.alphaType())
+                                : load_8888_as_pmcolor(*s++, src.colorType(), src.alphaType());
+                        *d = copySource ? loaded
+                                        : (dstStoresUnpremul ? srcOverUnpremulDst(loaded, *d)
+                                                            : SkPMSrcOver(loaded, *d));
+                        ++d;
+                    }
+                }
+                continue;
+            }
+
+            for (int x = clipped.fLeft; x < clipped.fRight; ++x) {
+                int sx = SkScalarFloorToInt((x + 0.5f - translateX) * invScaleX);
+                sx = std::min(std::max(sx, 0), srcMaxX);
+                uint32_t s = readSrc(sx, sy);
+                *d = copySource ? s
+                                : (dstStoresUnpremul ? srcOverUnpremulDst(s, *d)
+                                                    : SkPMSrcOver(s, *d));
+                ++d;
+            }
+        }
+    };
+
+    if (clip.quickContains(drawBounds)) {
+        blitRect(drawBounds);
+    } else if (clip.isBW()) {
+        for (SkRegion::Iterator it(clip.bwRgn()); !it.done(); it.next()) {
+            blitRect(it.rect());
+        }
+    } else {
+        return false;
+    }
+
+    return true;
+}
+
 void SkDraw::drawBitmap(const SkBitmap& bitmap, const SkMatrix& prematrix,
                         const SkRect* dstBounds, const SkSamplingOptions& sampling,
                         const SkPaint& origPaint) const {
@@ -364,6 +599,10 @@ void SkDraw::drawBitmap(const SkBitmap& bitmap, const SkMatrix& prematrix,
             }
             // if !blitter, then we fall-through to the slower case
         }
+    }
+
+    if (fast_scale_bitmap_nearest_32(fDst, *fRC, bitmap, matrix, sampling, *paint)) {
+        return;
     }
 
     // now make a temp draw on the stack, and use it
