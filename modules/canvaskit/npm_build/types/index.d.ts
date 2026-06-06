@@ -3004,6 +3004,20 @@ export interface Surface extends EmbindObject<"Surface"> {
     flush(): void;
 
     /**
+     * CPU-only escape hatch for drawing a CanvasImageSource with the browser's
+     * CanvasRenderingContext2D.drawImage in the middle of Skia drawing. This flushes the affected
+     * destination pixels to the backing HTML canvas, calls drawImage, then copies that destination
+     * rectangle back into the CPU surface so later Skia draws see it. Returns false when this
+     * surface is not a software surface attached to an HTML canvas.
+     */
+    drawImageCanvas2D(src: CanvasImageSource, dx: number, dy: number): boolean;
+    drawImageCanvas2D(src: CanvasImageSource, dx: number, dy: number,
+                      dWidth: number, dHeight: number): boolean;
+    drawImageCanvas2D(src: CanvasImageSource, sx: number, sy: number,
+                      sWidth: number, sHeight: number, dx: number, dy: number,
+                      dWidth: number, dHeight: number): boolean;
+
+    /**
      * Return a canvas that is backed by this surface. Any draws to the canvas will (eventually)
      * show up on the surface. The returned canvas is owned by the surface and does NOT need to
      * be cleaned up by the client.

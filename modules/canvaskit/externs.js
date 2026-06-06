@@ -796,6 +796,7 @@ var CanvasKit = {
       /** @return {CanvasKit.Image} */
       makeImageSnapshot: function() {},
       makeSurface: function() {},
+      drawImageCanvas2D: function() {},
       updateTextureFromSource: function() {},
     },
 
