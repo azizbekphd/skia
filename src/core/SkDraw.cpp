@@ -11,6 +11,7 @@
 #include "include/core/SkBlendMode.h"
 #include "include/core/SkColorSpace.h"
 #include "include/core/SkColorType.h"
+#include "include/core/SkImageInfo.h"
 #include "include/core/SkMatrix.h"
 #include "include/core/SkPaint.h"
 #include "include/core/SkPixmap.h"
@@ -18,13 +19,14 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkRegion.h"
 #include "include/core/SkScalar.h"
+#include "include/core/SkSpan.h"
 #include "include/core/SkTileMode.h"
 #include "include/core/SkUnPreMultiply.h"
+#include "include/private/base/SkAlign.h"
 #include "include/private/base/SkAssert.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkFixed.h"
 #include "include/private/base/SkFloatingPoint.h"
-#include "include/private/base/SkSpan_impl.h"
 #include "include/private/base/SkTemplates.h"
 #include "include/private/base/SkTo.h"
 #include "src/base/SkArenaAlloc.h"
@@ -37,18 +39,19 @@
 #include "src/core/SkDrawTypes.h"
 #include "src/core/SkImageInfoPriv.h"
 #include "src/core/SkImagePriv.h"
+#include "src/core/SkMask.h"
+#include "src/core/SkMaskFilterBase.h"
 #include "src/core/SkMatrixUtils.h"
 #include "src/core/SkRasterClip.h"
 #include "src/core/SkRectPriv.h"
 #include "src/core/SkScan.h"
 #include <algorithm>
 #include <cstring>
+
+#include <string.h>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
-
-#if defined(SK_SUPPORT_LEGACY_ALPHA_BITMAP_AS_COVERAGE)
-#include "src/core/SkMaskFilterBase.h"
-#endif
-
 using namespace skia_private;
 
 static SkPaint make_paint_with_image(const SkPaint& origPaint, const SkBitmap& bitmap,
@@ -85,6 +88,18 @@ private:
     SkAAClipBlitterWrapper fWrapper;
 };
 
+#define DIRECT_BLIT_LOOP(writable_method, value)    \
+    do {                                            \
+        for (auto p : devPts) {                     \
+            int x = SkScalarFloorToInt(p.fX);       \
+            int y = SkScalarFloorToInt(p.fY);       \
+            if (cr.contains(x, y)) {                \
+                *pm.writable_method(x, y) = value;  \
+            }                                       \
+        }                                           \
+    } while (0)
+
+
 static void bw_pt_hair_proc(const PtProcRec& rec, SkSpan<const SkPoint> devPts,
                             SkBlitter* blitter) {
     const auto direct = blitter->canDirectBlit();
@@ -92,12 +107,12 @@ static void bw_pt_hair_proc(const PtProcRec& rec, SkSpan<const SkPoint> devPts,
         const SkIRect cr = rec.fClip->getBounds();
         auto pm = direct->pm;
         const auto v = direct->value;
-        for (auto p : devPts) {
-            int x = SkScalarFloorToInt(p.fX);
-            int y = SkScalarFloorToInt(p.fY);
-            if (cr.contains(x, y)) {
-                *pm.writable_addr32(x, y) = v;
-            }
+        switch (pm.info().bytesPerPixel()) {
+            case 1: DIRECT_BLIT_LOOP(writable_addr8,  v); break;
+            case 2: DIRECT_BLIT_LOOP(writable_addr16, v); break;
+            case 4: DIRECT_BLIT_LOOP(writable_addr32, v); break;
+            case 8: DIRECT_BLIT_LOOP(writable_addr64, v); break;
+            default: SkASSERT(false);
         }
     } else {
         for (auto p : devPts) {
@@ -259,19 +274,17 @@ PtProcRec::Proc PtProcRec::chooseProc(SkBlitter** blitterPtr) {
 // must be even for lines/polygon to work
 #define MAX_DEV_PTS     32
 
-void SkDraw::drawPoints(SkCanvas::PointMode mode, size_t count,
-                        const SkPoint pts[], const SkPaint& paint,
-                        SkDevice* device) const {
+void SkDraw::drawPoints(SkCanvas::PointMode mode, SkSpan<const SkPoint> points,
+                        const SkPaint& paint, SkDevice* device) const {
     // if we're in lines mode, force count to be even
     if (SkCanvas::kLines_PointMode == mode) {
-        count &= ~(size_t)1;
+        points = points.first(points.size() & ~1);   // force it to be even
     }
 
-    SkASSERT(pts != nullptr);
     SkDEBUGCODE(this->validate();)
 
      // nothing to draw
-    if (!count || fRC->isEmpty()) {
+    if (points.empty() || fRC->isEmpty()) {
         return;
     }
 
@@ -285,12 +298,14 @@ void SkDraw::drawPoints(SkCanvas::PointMode mode, size_t count,
         // we have to back up subsequent passes if we're in polygon mode
         const size_t backup = (SkCanvas::kPolygon_PointMode == mode);
 
+        auto count = points.size();
+        auto pts = points.data();
         do {
             int n = SkToInt(count);
             if (n > MAX_DEV_PTS) {
                 n = MAX_DEV_PTS;
             }
-            fCTM->mapPoints(devPts, pts, n);
+            fCTM->mapPoints({devPts, n}, {pts, n});
             if (!SkIsFinite(&devPts[0].fX, n * 2)) {
                 return;
             }
@@ -303,7 +318,7 @@ void SkDraw::drawPoints(SkCanvas::PointMode mode, size_t count,
             }
         } while (count != 0);
     } else {
-        this->drawDevicePoints(mode, count, pts, paint, device);
+        this->drawDevicePoints(mode, points, paint, device);
     }
 }
 
@@ -611,11 +626,11 @@ void SkDraw::drawBitmap(const SkBitmap& bitmap, const SkMatrix& prematrix,
     draw.fCTM = &matrix;
 
     // For a long time, the CPU backend treated A8 bitmaps as coverage, rather than alpha. This was
-    // inconsistent with the GPU backend (skbug.com/9692). When this was fixed, it altered behavior
+    // inconsistent with the GPU backend (skbug.com/40041022). When this was fixed, it altered behavior
     // for some Android apps (b/231400686). Thus: keep the old behavior in the framework.
 #if defined(SK_SUPPORT_LEGACY_ALPHA_BITMAP_AS_COVERAGE)
     if (bitmap.colorType() == kAlpha_8_SkColorType && !paint->getColorFilter()) {
-        draw.drawBitmapAsMask(bitmap, sampling, *paint);
+        draw.drawBitmapAsMask(bitmap, sampling, *paint, nullptr);
         return;
     }
 #endif
@@ -679,8 +694,8 @@ void SkDraw::drawSprite(const SkBitmap& bitmap, int x, int y, const SkPaint& ori
     draw.drawRect(r, paintWithShader);
 }
 
-#if defined(SK_SUPPORT_LEGACY_ALPHA_BITMAP_AS_COVERAGE)
-void SkDraw::drawDevMask(const SkMask& srcM, const SkPaint& paint) const {
+void SkDraw::drawDevMask(const SkMask& srcM, const SkPaint& paint,
+                         const SkMatrix* paintMatrix) const {
     if (srcM.fBounds.isEmpty()) {
         return;
     }
@@ -694,7 +709,7 @@ void SkDraw::drawDevMask(const SkMask& srcM, const SkPaint& paint) const {
     }
     SkAutoMaskFreeImage ami(dstM.image());
 
-    SkAutoBlitterChoose blitterChooser(*this, nullptr, paint);
+    SkAutoBlitterChoose blitterChooser(*this, paintMatrix, paint);
     SkBlitter* blitter = blitterChooser.get();
 
     SkAAClipBlitterWrapper wrapper;
@@ -711,7 +726,7 @@ void SkDraw::drawDevMask(const SkMask& srcM, const SkPaint& paint) const {
 }
 
 void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap, const SkSamplingOptions& sampling,
-                              const SkPaint& paint) const {
+                              const SkPaint& paint, const SkMatrix* paintMatrix) const {
     SkASSERT(bitmap.colorType() == kAlpha_8_SkColorType);
 
     // nothing to draw
@@ -733,7 +748,7 @@ void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap, const SkSamplingOptions& s
                     SkToU32(pmap.rowBytes()),
                     SkMask::kA8_Format);
 
-        this->drawDevMask(mask, paint);
+        this->drawDevMask(mask, paint, paintMatrix);
     } else {    // need to xform the bitmap first
         SkRect  r;
         SkMaskBuilder mask;
@@ -789,7 +804,6 @@ void SkDraw::drawBitmapAsMask(const SkBitmap& bitmap, const SkSamplingOptions& s
             rr.setIWH(bitmap.width(), bitmap.height());
             c.drawRect(rr, paintWithShader);
         }
-        this->drawDevMask(mask, paint);
+        this->drawDevMask(mask, paint, paintMatrix);
     }
 }
-#endif

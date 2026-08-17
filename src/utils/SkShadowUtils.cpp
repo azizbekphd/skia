@@ -165,7 +165,7 @@ struct SpotVerticesFactory {
             noTrans[SkMatrix::kMTransX] = 0;
             noTrans[SkMatrix::kMTransY] = 0;
             SkPoint devCenter(fLocalCenter);
-            noTrans.mapPoints(&devCenter, 1);
+            devCenter = noTrans.mapPoint(devCenter);
             SkPoint3 centerLightPos = SkPoint3::Make(devCenter.fX, devCenter.fY, fDevLightPos.fZ);
             *translate = fOffset;
             return SkShadowTessellator::MakeSpot(path, noTrans, zParams,
@@ -469,7 +469,7 @@ bool draw_shadow(const FACTORY& factory,
          SkColorFilters::Blend(color, SkBlendMode::kModulate)->makeComposed(
                                                                 SkColorFilterPriv::MakeGaussian()));
 
-    drawProc(vertices.get(), SkBlendMode::kModulate, paint,
+    drawProc(vertices.get(), SkBlendMode::kDst, paint,
              context.fTranslate.fX, context.fTranslate.fY, path.viewMatrix().hasPerspective());
 
     return true;
@@ -548,7 +548,7 @@ static bool fill_shadow_rec(const SkPath& path, const SkPoint3& zPlaneParams,
         if (!ctm.invert(&inverse)) {
             return false;
         }
-        inverse.mapPoints(&pt, 1);
+        pt = inverse.mapPoint(pt);
     }
 
     rec->fZPlaneParams   = zPlaneParams;
@@ -602,7 +602,6 @@ void SkDevice::drawShadow(SkCanvas* canvas, const SkPath& path, const SkDrawShad
     }
 
     SkMatrix viewMatrix = this->localToDevice();
-    SkAutoDeviceTransformRestore adr(this, SkM44());
 
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
     auto drawVertsProc = [this](const SkVertices* vertices, SkBlendMode mode, const SkPaint& paint,
@@ -635,11 +634,13 @@ void SkDevice::drawShadow(SkCanvas* canvas, const SkPath& path, const SkDrawShad
     SkPoint3 zPlaneParams = rec.fZPlaneParams;
     SkPoint3 devLightPos = rec.fLightPos;
     if (!directional) {
-        viewMatrix.mapPoints((SkPoint*)&devLightPos.fX, 1);
+        viewMatrix.mapPoints({(SkPoint*)&devLightPos.fX, 1});
     }
     float lightRadius = rec.fLightRadius;
 
     if (SkColorGetA(rec.fAmbientColor) > 0) {
+        SkAutoDeviceTransformRestore adr(this, SkM44());
+
         bool success = false;
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
         if (uncached && !useBlur) {
@@ -658,7 +659,7 @@ void SkDevice::drawShadow(SkCanvas* canvas, const SkPath& path, const SkDrawShad
                 // or transparent and their real contribution to the final blended color is via
                 // their alpha. We can skip expensive per-vertex color conversion for this.
                 this->drawVertices(vertices.get(),
-                                   SkBlender::Mode(SkBlendMode::kModulate),
+                                   SkBlender::Mode(SkBlendMode::kDst),
                                    paint,
                                    /*skipColorXform=*/true);
                 success = true;
@@ -733,6 +734,8 @@ void SkDevice::drawShadow(SkCanvas* canvas, const SkPath& path, const SkDrawShad
     }
 
     if (SkColorGetA(rec.fSpotColor) > 0) {
+        SkAutoDeviceTransformRestore adr(this, SkM44());
+
         bool success = false;
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
         if (uncached && !useBlur) {
@@ -753,7 +756,7 @@ void SkDevice::drawShadow(SkCanvas* canvas, const SkPath& path, const SkDrawShad
                 // or transparent and their real contribution to the final blended color is via
                 // their alpha. We can skip expensive per-vertex color conversion for this.
                 this->drawVertices(vertices.get(),
-                                   SkBlender::Mode(SkBlendMode::kModulate),
+                                   SkBlender::Mode(SkBlendMode::kDst),
                                    paint,
                                    /*skipColorXform=*/true);
                 success = true;
@@ -768,7 +771,7 @@ void SkDevice::drawShadow(SkCanvas* canvas, const SkPath& path, const SkDrawShad
 
             SkPoint center = SkPoint::Make(path.getBounds().centerX(), path.getBounds().centerY());
             factory.fLocalCenter = center;
-            viewMatrix.mapPoints(&center, 1);
+            center = viewMatrix.mapPoint(center);
             SkScalar radius, scale;
             if (SkToBool(rec.fFlags & kDirectionalLight_ShadowFlag)) {
                 SkDrawShadowMetrics::GetDirectionalParams(zPlaneParams.fZ, devLightPos.fX,

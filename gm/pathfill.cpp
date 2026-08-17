@@ -9,6 +9,7 @@
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColor.h"
 #include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkPathBuilder.h"
 #include "include/core/SkPathUtils.h"
 #include "include/core/SkRRect.h"
@@ -17,7 +18,6 @@
 #include "include/core/SkSize.h"
 #include "include/core/SkString.h"
 #include "include/core/SkTypes.h"
-#include "include/utils/SkParsePath.h"
 
 namespace {
 struct PathDY {
@@ -35,8 +35,7 @@ static PathDY make_frame() {
     SkPaint paint;
     paint.setStyle(SkPaint::kStroke_Style);
     paint.setStrokeWidth(SkIntToScalar(5));
-    skpathutils::FillPathWithPaint(path, paint, &path);
-    return {path, 15};
+    return {skpathutils::FillPathWithPaint(path, paint), 15};
 }
 
 static PathDY make_triangle() {
@@ -440,7 +439,7 @@ DEF_GM( return new PathFillGM; )
 DEF_GM( return new PathInverseFillGM; )
 
 DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
-    // from skbug.com/7792 bug description
+    // from skbug.com/40039046 bug description
     SkPaint p;
     SkPath path;
     path.moveTo(10, 10);
@@ -449,7 +448,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(150, 150);
     path.lineTo(75, 150);
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c3
+    // from skbug.com/40039046#c3
     canvas->translate(200, 0);
     path.reset();
     path.moveTo(75, 50);
@@ -460,7 +459,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(75, 50);
     path.close();
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c9
+    // from skbug.com/40039046#c9
     canvas->translate(200, 0);
     path.reset();
     path.moveTo(10, 10);
@@ -470,7 +469,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(75, 150);
     path.close();
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c11
+    // from skbug.com/40039046#c11
     canvas->translate(-200 * 2, 200);
     path.reset();
     path.moveTo(75, 150);
@@ -480,7 +479,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(75, 150);
     path.moveTo(75, 150);
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c14
+    // from skbug.com/40039046#c14
     canvas->translate(200, 0);
     path.reset();
     path.moveTo(250, 75);
@@ -495,7 +494,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(0, 0);
     path.close();
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c15
+    // from skbug.com/40039046#c15
     canvas->translate(200, 0);
     path.reset();
     path.moveTo(75, 75);
@@ -504,7 +503,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(75, 150);
     path.moveTo(250, 75);
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c17
+    // from skbug.com/40039046#c17
     canvas->translate(-200 * 2, 200);
     path.reset();
     path.moveTo(75, 10);
@@ -515,7 +514,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(75, 10);
     path.close();
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c19
+    // from skbug.com/40039046#c19
     canvas->translate(200, 0);
     path.reset();
     path.moveTo(75, 75);
@@ -530,7 +529,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(30, 10);
     path.lineTo(10, 30);
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c23
+    // from skbug.com/40039046#c23
     canvas->translate(200, 0);
     path.reset();
     path.moveTo(75, 75);
@@ -542,7 +541,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(75, 150);
     path.close();
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c29
+    // from skbug.com/40039046#c29
     canvas->translate(-200 * 2, 200);
     path.reset();
     path.moveTo(75, 75);
@@ -553,7 +552,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.moveTo(75, 75);
     path.close();
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c31
+    // from skbug.com/40039046#c31
     canvas->translate(200, 0);
     path.reset();
     path.moveTo(75, 75);
@@ -564,7 +563,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.moveTo(75, 75);
     path.close();
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c36
+    // from skbug.com/40039046#c36
     canvas->translate(200, 0);
     path.reset();
     path.moveTo(75, 75);
@@ -574,7 +573,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.moveTo(75, 75);
     path.lineTo(75, 75);
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c39
+    // from skbug.com/40039046#c39
     canvas->translate(200, -200 * 3);
     path.reset();
     path.moveTo(150, 75);
@@ -594,7 +593,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.lineTo(150, 75);
     path.close();
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c41
+    // from skbug.com/40039046#c41
     canvas->translate(0, 200);
     path.reset();
     path.moveTo(75, 75);
@@ -605,7 +604,7 @@ DEF_SIMPLE_GM(bug7792, canvas, 800, 800) {
     path.moveTo(75, 75);
     path.close();
     canvas->drawPath(path, p);
-    // from skbug.com/7792#c53
+    // from skbug.com/40039046#c53
     canvas->translate(0, 200);
     path.reset();
     path.moveTo(75, 75);
@@ -706,58 +705,5 @@ DEF_SIMPLE_GM(path_skbug_11886, canvas, 256, 256) {
     path.cubicTo(m + SkPoint{0.f, 1.f}, m + SkPoint{20.f, -750.f}, m + SkPoint{83.f, -746.f});
     SkPaint paint;
     paint.setAntiAlias(true);
-    canvas->drawPath(path, paint);
-}
-
-DEF_SIMPLE_GM(path_skbug_328687149_Case1, canvas, 256, 256) {
-    SkPaint paint;
-    paint.setAntiAlias(false);
-
-    SkPath path;
-    SkParsePath::FromSVGString(
-        "M0 0C54 26 55 32 39 0L60 48M47 50Q32 26 58 8L25 20L60 7L19 17",
-        &path
-    );
-    path.setFillType(SkPathFillType::kEvenOdd);
-
-    canvas->drawPath(path, paint);
-}
-
-DEF_SIMPLE_GM(path_skbug_328687149_Case2, canvas, 256, 256) {
-    SkPaint paint;
-    paint.setAntiAlias(false);
-
-    SkPath path;
-    SkParsePath::FromSVGString(
-        "M0 0Q44 39 47 1L43 23C9 36 51 13 45 12C53 41 58 49 7 23M4 13M12 10L52 7C32 62 33 38 36 62",
-        &path
-    );
-    path.setFillType(SkPathFillType::kEvenOdd);
-
-    canvas->drawPath(path, paint);
-}
-
-DEF_SIMPLE_GM(path_skbug_328687149_Case3, canvas, 256, 256) {
-    SkPaint paint;
-    paint.setAntiAlias(false);
-
-    SkPath path;
-    SkParsePath::FromSVGString(
-        "M0 0L9 19Q57 50 48 28C48 62 45 34 14 54Q6 53 28 49M50 54C58 35 53 45 20 35",
-        &path
-    );
-    path.setFillType(SkPathFillType::kEvenOdd);
-
-    canvas->drawPath(path, paint);
-}
-
-DEF_SIMPLE_GM(path_skbug_328687149_Case4, canvas, 256, 256) {
-    SkPaint paint;
-    paint.setAntiAlias(false);
-
-    SkPath path;
-    SkParsePath::FromSVGString("M0 0L8 5Q1 43 61 55M57 14Q2 11 42 51Q22 1 40 46", &path);
-    path.setFillType(SkPathFillType::kEvenOdd);
-
     canvas->drawPath(path, paint);
 }

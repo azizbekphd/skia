@@ -11,6 +11,7 @@
 #if !defined(SK_ENABLE_OPTIMIZE_SIZE)
 
 #include "include/core/SkPath.h"
+#include "include/core/SkPathTypes.h"
 #include "include/core/SkPoint.h"
 #include "include/core/SkScalar.h"
 #include "include/private/base/SkAssert.h"
@@ -23,7 +24,6 @@
 #include <tuple>
 
 class GrEagerVertexAllocator;
-enum class SkPathFillType;
 struct SkRect;
 
 #define TRIANGULATOR_LOGGING 0
@@ -59,7 +59,6 @@ public:
     struct Vertex;
     struct VertexList;
     struct Line;
-    struct Segment;
     struct Edge;
     struct EdgeList;
     struct MonotonePoly;
@@ -379,6 +378,7 @@ struct GrTriangulator::Line {
         fB *= scale;
         fC *= scale;
     }
+
     bool nearParallel(const Line& o) const {
         return fabs(o.fA - fA) < 0.00001 && fabs(o.fB - fB) < 0.00001;
     }
@@ -386,27 +386,6 @@ struct GrTriangulator::Line {
     // Compute the intersection of two (infinite) Lines.
     bool intersect(const Line& other, SkPoint* point) const;
     double fA, fB, fC;
-};
-
-// The data structure of the original segment to which the split edge belongs
-struct GrTriangulator::Segment {
-    Segment(Vertex* top, Vertex* bottom)
-        : fTop(top)
-        , fBottom(bottom)
-        , fLine(top, bottom) {
-    }
-
-    bool isEndpoint(const SkPoint& point) const {
-        return (point == fTop->fPoint) || (point == fBottom->fPoint);
-    }
-
-    bool isEndpoint(Vertex* v) const {
-        return (v == fTop) || (v == fBottom);
-    }
-
-    Vertex* fTop;
-    Vertex* fBottom;
-    Line fLine;
 };
 
 /**
@@ -447,9 +426,7 @@ struct GrTriangulator::Edge {
         , fRightPolyNext(nullptr)
         , fUsedInLeftPoly(false)
         , fUsedInRightPoly(false)
-        , fLine(top, bottom)
-        , fOriginalSegment(nullptr) {
-        }
+        , fLine(top, bottom) {}
     int      fWinding;          // 1 == edge goes downward; -1 = edge goes upward.
     Vertex*  fTop;              // The top vertex in vertex-sort-order (sweep_lt).
     Vertex*  fBottom;           // The bottom vertex in vertex-sort-order.
@@ -469,39 +446,22 @@ struct GrTriangulator::Edge {
     bool     fUsedInLeftPoly;
     bool     fUsedInRightPoly;
     Line     fLine;
-    Segment* fOriginalSegment;
 
     double dist(const SkPoint& p) const {
         // Coerce points coincident with the vertices to have dist = 0, since converting from
         // a double intersection point back to float storage might construct a point that's no
         // longer on the ideal line.
-        const Line* line = fOriginalSegment && !fOriginalSegment->isEndpoint(p)
-            ? &fOriginalSegment->fLine : &fLine;
-        return (p == fTop->fPoint || p == fBottom->fPoint) ? 0.0 : line->dist(p);
+        return (p == fTop->fPoint || p == fBottom->fPoint) ? 0.0 : fLine.dist(p);
     }
+
     bool isRightOf(const Vertex& v) const { return this->dist(v.fPoint) < 0.0; }
-    bool isLeftOf(const Vertex& v) const { return this->dist(v.fPoint) > 0.0; }
+    bool isLeftOf(const Vertex& v) const { return this->dist(v.fPoint)  > 0.0; }
     void recompute() { fLine = Line(fTop, fBottom); }
     void insertAbove(Vertex*, const Comparator&);
     void insertBelow(Vertex*, const Comparator&);
     void disconnect();
     bool intersect(const Edge& other, SkPoint* p, uint8_t* alpha = nullptr) const;
-    void rescaleToWinding() {
-        fLine.normalize();
-        fLine = fLine * fWinding;
-
-        if (fOriginalSegment) {
-            fOriginalSegment->fLine.normalize();
-            fOriginalSegment->fLine = fOriginalSegment->fLine * fWinding;
-        }
-    }
-    double pointTo(const SkPoint& p) const {
-        float sDx = fBottom->fPoint.fX - fTop->fPoint.fX;
-        float sDy = fBottom->fPoint.fY - fTop->fPoint.fY;
-        double t = (std::abs(sDx) > std::abs(sDy)) ? ((double)p.fX - fTop->fPoint.fX) / sDx
-                                                   : ((double)p.fY - fTop->fPoint.fY) / sDy;
-        return t;
-    }
+    bool hasTopAndBottom() const { return fTop != nullptr && fBottom != nullptr; }
 };
 
 struct GrTriangulator::EdgeList {

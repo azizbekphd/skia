@@ -18,7 +18,6 @@
 #include "include/core/SkScalar.h"
 #include "include/core/SkShader.h"
 #include "include/core/SkStrokeRec.h"
-#include "include/effects/SkStrokeAlignPathEffect.h"
 #include "include/private/base/SkTPin.h"
 #include "include/private/base/SkTo.h"
 #include "src/core/SkBlenderBase.h"
@@ -161,9 +160,6 @@ void SkPaint::setBlender(sk_sp<SkBlender> blender) {
 void SkPaint::setStrokeWidth(SkScalar width) {
     if (width >= 0) {
         fWidth = width;
-
-        sk_sp<SkPathEffect> strokeAlignEffect = SkStrokeAlignPathEffect::Make(fBitfields.fAlignType, SkScalarHalf(fWidth));
-        this->setPathEffect(strokeAlignEffect);
     } else {
 #ifdef SK_REPORT_API_RANGE_CHECK
         SkDebugf("SkPaint::setStrokeWidth() called with negative value\n");
@@ -204,9 +200,6 @@ void SkPaint::setStrokeJoin(Join jt) {
 void SkPaint::setStrokeAlign(Align at) {
     if ((unsigned)at < kAlignCount) {
         fBitfields.fAlignType = SkToU8(at);
-
-        sk_sp<SkPathEffect> strokeAlignEffect = SkStrokeAlignPathEffect::Make(fBitfields.fAlignType, SkScalarHalf(fWidth));
-        this->setPathEffect(strokeAlignEffect);
     } else {
 #ifdef SK_REPORT_API_RANGE_CHECK
         SkDebugf("SkPaint::setStrokeAlign(%d) out of range\n", at);

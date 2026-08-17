@@ -27,6 +27,7 @@ namespace graphite {
 class Caps;
 class ComputeStep;
 enum class Coverage;
+class FloatStorageManager;
 class Geometry;
 class PaintParams;
 class PaintParamsKeyBuilder;
@@ -36,6 +37,7 @@ struct RenderPassDesc;
 class RenderStep;
 struct ResourceBindingRequirements;
 class ShaderCodeDictionary;
+enum class TextureFormat : uint8_t;
 class UniformManager;
 class UniquePaintParamsID;
 
@@ -43,6 +45,7 @@ class UniquePaintParamsID;
 enum class Layout : uint8_t;
 
 UniquePaintParamsID ExtractPaintData(Recorder*,
+                                     FloatStorageManager* floatStorageManager,
                                      PipelineDataGatherer* gatherer,
                                      PaintParamsKeyBuilder* builder,
                                      const Layout layout,
@@ -73,7 +76,7 @@ void CollectIntrinsicUniforms(const Caps* caps,
 
 // Returns whether or not hardware blending can be used. If not, we must perform a dst read within
 // the shader.
-bool CanUseHardwareBlending(const Caps*, std::optional<SkBlendMode>, Coverage);
+bool CanUseHardwareBlending(const Caps*, TextureFormat, std::optional<SkBlendMode>, Coverage);
 
 std::string GetPipelineLabel(const ShaderCodeDictionary*,
                              const RenderPassDesc& renderPassDesc,

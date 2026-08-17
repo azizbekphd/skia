@@ -11,6 +11,7 @@
 #include "include/gpu/graphite/mtl/MtlGraphiteTypes.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/Log.h"
+#include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
 #include "src/gpu/graphite/TextureFormat.h"
 #include "src/gpu/graphite/TextureProxy.h"
@@ -359,6 +360,12 @@ void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
         return;
     }
 
+    // If there is gradient data to bind, it must be done prior to draws.
+    if (drawPass->floatStorageManager()->hasData()) {
+        this->bindUniformBuffer(drawPass->floatStorageManager()->getBufferInfo(),
+                                UniformSlot::kGradient);
+    }
+
     drawPass->addResourceRefs(this);
 
     for (auto[type, cmdPtr] : drawPass->commands()) {
@@ -418,8 +425,11 @@ void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
             case DrawPassCommands::Type::kBindTexturesAndSamplers: {
                 auto bts = static_cast<DrawPassCommands::BindTexturesAndSamplers*>(cmdPtr);
                 for (int j = 0; j < bts->fNumTexSamplers; ++j) {
-                    this->bindTextureAndSampler(drawPass->getTexture(bts->fTextureIndices[j]),
-                                                drawPass->getSampler(bts->fSamplerIndices[j]),
+                    // immutable samplers don't exist in metal
+                    SkASSERT(!bts->fSamplers[j].isImmutable());
+                    this->bindTextureAndSampler(bts->fTextures[j]->texture(),
+                                                fSharedContext->globalCache()->getDynamicSampler(
+                                                        bts->fSamplers[j]),
                                                 j);
                 }
                 break;
@@ -624,7 +634,7 @@ void MtlCommandBuffer::updateIntrinsicUniforms(SkIRect viewport) {
             bytes.data(), bytes.size_bytes(), MtlGraphicsPipeline::kIntrinsicUniformBufferIndex);
 }
 
-void MtlCommandBuffer::setBlendConstants(float* blendConstants) {
+void MtlCommandBuffer::setBlendConstants(std::array<float, 4> blendConstants) {
     SkASSERT(fActiveRenderCommandEncoder);
 
     fActiveRenderCommandEncoder->setBlendColor(blendConstants);
