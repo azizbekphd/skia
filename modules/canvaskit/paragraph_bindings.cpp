@@ -803,7 +803,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
     value_object<SimpleParagraphStyle>("ParagraphStyle")
         .field("textAlign",            &SimpleParagraphStyle::textAlign)
         .field("textDirection",        &SimpleParagraphStyle::textDirection)
-        .field("textStyle",            &SimpleParagraphStyle::textStyle);
+        .field("textStyle",            &SimpleParagraphStyle::textStyle)
         // .field("disableHinting",       &SimpleParagraphStyle::disableHinting)
         // .field("_ellipsisPtr",         &SimpleParagraphStyle::ellipsisPtr)
         // .field("_ellipsisLen",         &SimpleParagraphStyle::ellipsisLen)
@@ -812,7 +812,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         // .field("replaceTabCharacters", &SimpleParagraphStyle::replaceTabCharacters)
         // .field("textHeightBehavior",   &SimpleParagraphStyle::textHeightBehavior)
         // .field("applyRoundingHack",    &SimpleParagraphStyle::applyRoundingHack);
-        // .field("strutStyle",           &SimpleParagraphStyle::strutStyle)
+        .field("strutStyle",           &SimpleParagraphStyle::strutStyle);
 
     value_object<SimpleStrutStyle>("StrutStyle")
         .field("_fontFamiliesPtr", &SimpleStrutStyle::fontFamiliesPtr)
