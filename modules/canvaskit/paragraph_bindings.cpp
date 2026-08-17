@@ -764,6 +764,10 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
       .class_function("Make", optional_override([]()-> sk_sp<para::TypefaceFontProvider> {
           return sk_make_sp<para::TypefaceFontProvider>();
       }))
+      .function("_registerFontWithoutName", optional_override([](para::TypefaceFontProvider& self,
+                                                      sk_sp<SkTypeface> typeface) {
+          self.registerTypeface(typeface);
+      }), allow_raw_pointers())
       .function("_registerFont", optional_override([](para::TypefaceFontProvider& self,
                                                       sk_sp<SkTypeface> typeface,
                                                       WASMPointerU8 familyPtr) {
@@ -799,7 +803,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
     value_object<SimpleParagraphStyle>("ParagraphStyle")
         .field("textAlign",            &SimpleParagraphStyle::textAlign)
         .field("textDirection",        &SimpleParagraphStyle::textDirection)
-        .field("textStyle",            &SimpleParagraphStyle::textStyle);
+        .field("textStyle",            &SimpleParagraphStyle::textStyle)
         // .field("disableHinting",       &SimpleParagraphStyle::disableHinting)
         // .field("_ellipsisPtr",         &SimpleParagraphStyle::ellipsisPtr)
         // .field("_ellipsisLen",         &SimpleParagraphStyle::ellipsisLen)
@@ -808,7 +812,7 @@ EMSCRIPTEN_BINDINGS(Paragraph) {
         // .field("replaceTabCharacters", &SimpleParagraphStyle::replaceTabCharacters)
         // .field("textHeightBehavior",   &SimpleParagraphStyle::textHeightBehavior)
         // .field("applyRoundingHack",    &SimpleParagraphStyle::applyRoundingHack);
-        // .field("strutStyle",           &SimpleParagraphStyle::strutStyle)
+        .field("strutStyle",           &SimpleParagraphStyle::strutStyle);
 
     value_object<SimpleStrutStyle>("StrutStyle")
         .field("_fontFamiliesPtr", &SimpleStrutStyle::fontFamiliesPtr)

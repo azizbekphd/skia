@@ -332,6 +332,14 @@ void OneLineShaper::sortOutGlyphs(std::function<void(GlyphRange)>&& sortOutUnres
             // We only count glyph resolved if all the glyphs in its grapheme are resolved
             graphemeResolved = glyph != 0 || isControl8;
             graphemeStart = gi;
+
+            if (graphemeResolved && !isControl8 && !fAllowEmojiSequences) {
+                const char* begin = fParagraph->text().begin() + graphemeStart;
+                const char* end = fParagraph->text().end();
+                if (OneLineShaper::getEmojiSequenceStart(fParagraph->fUnicode.get(), &begin, end) != -1) {
+                    graphemeResolved = false;
+                }
+            }
         } else if (glyph == 0) {
             // Found unresolved glyph - the entire grapheme is unresolved now
             graphemeResolved = false;
@@ -502,6 +510,9 @@ void OneLineShaper::matchResolvedFonts(const TextStyle& textStyle,
                 if (typeface == nullptr) {
                     // There is no fallback font for this character,
                     // so move on to the next character.
+                    if (emojiStart != -1) {
+                        SkUTF::NextUTF8WithReplacement(&ch, unresolvedText.end());
+                    }
                     continue;
                 }
 
@@ -509,11 +520,20 @@ void OneLineShaper::matchResolvedFonts(const TextStyle& textStyle,
                 if (!alreadyTriedTypefaces.contains(typeface->uniqueID())) {
                     alreadyTriedTypefaces.add(typeface->uniqueID());
                 } else {
+                    if (emojiStart != -1) {
+                        SkUTF::NextUTF8WithReplacement(&ch, unresolvedText.end());
+                    }
                     continue;
                 }
 
+                if (emojiStart != -1) {
+                    fAllowEmojiSequences = true;
+                }
                 auto resolvedBlocksBefore = fResolvedBlocks.size();
                 auto resolved = visitor(typeface);
+                if (emojiStart != -1) {
+                    fAllowEmojiSequences = false;
+                }
                 if (resolved == Resolved::Everything) {
                     if (hopelessBlocks.empty()) {
                         // Resolved everything, no need to try another font
@@ -530,6 +550,10 @@ void OneLineShaper::matchResolvedFonts(const TextStyle& textStyle,
                 if (resolved == Resolved::Something) {
                     // Resolved something, no need to try another codepoint
                     break;
+                }
+
+                if (emojiStart != -1) {
+                    SkUTF::NextUTF8WithReplacement(&ch, unresolvedText.end());
                 }
             }
         }
@@ -817,7 +841,7 @@ SkUnichar OneLineShaper::getEmojiSequenceStart(SkUnicode* unicode, const char** 
         return -1;
     }
 
-    if (!unicode->isEmojiComponent(codepoint1)) {
+    if (unicode->isEmojiPresentation(codepoint1)) {
         // This is an emoji sequence start
         *begin = next;
         return codepoint1;
@@ -826,6 +850,11 @@ SkUnichar OneLineShaper::getEmojiSequenceStart(SkUnicode* unicode, const char** 
     // Now we need to look at the next codepoint to see what is going on
     const char* last = next;
     auto codepoint2 = SkUTF::NextUTF8WithReplacement(&last, end);
+
+    if (codepoint2 == 0xFE0F) {
+        *begin = next;
+        return codepoint1;
+    }
 
     // emoji_flag_sequence
     if (unicode->isRegionalIndicator(codepoint2)) {
@@ -836,15 +865,6 @@ SkUnichar OneLineShaper::getEmojiSequenceStart(SkUnicode* unicode, const char** 
         } else {
             // That really should not happen assuming correct UTF8 text
             return -1;
-        }
-    }
-
-    // emoji_keycap_sequence
-    if (codepoint2 == 0xFE0F) {
-        auto codepoint3 = SkUTF::NextUTF8WithReplacement(&last, end);
-        if (codepoint3 == 0x20E3) {
-            *begin = next;
-            return codepoint1;
         }
     }
 

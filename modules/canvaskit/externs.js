@@ -23,6 +23,7 @@
 //
 
 var CanvasKit = {
+  _doRecoverableLeakCheck: function() {},
   // public API (i.e. things we declare in the pre-js file or in the cpp bindings)
   Color: function() {},
   Color4f: function() {},
@@ -47,6 +48,7 @@ var CanvasKit = {
   /** @return {CanvasKit.Image} */
   MakeImageFromEncoded: function() {},
   MakeImageFromCanvasImageSource: function() {},
+  TextureFromImage: function() {},
   MakeOnScreenGLSurface: function() {},
   MakeRenderTarget: function() {},
   MakePicture: function() {},
@@ -89,6 +91,7 @@ var CanvasKit = {
   _MakePicture: function() {},
   _MakeRenderTargetII: function() {},
   _MakeRenderTargetWH: function() {},
+  _TextureFromImage: function() {},
   _computeTonalColors: function() {},
   _decodeAnimatedImage: function() {},
   _decodeImage: function() {},
@@ -483,9 +486,11 @@ var CanvasKit = {
     // public API (from C++ and JS bindings)
     Make: function() {},
     registerFont: function() {},
+    registerFontWithoutName: function() {},
 
     // private API
     _registerFont: function() {},
+    _registerFontWithoutName: function() {},
   },
 
   FontCollection: {
@@ -791,6 +796,7 @@ var CanvasKit = {
       /** @return {CanvasKit.Image} */
       makeImageSnapshot: function() {},
       makeSurface: function() {},
+      drawImageCanvas2D: function() {},
       updateTextureFromSource: function() {},
     },
 

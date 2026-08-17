@@ -60,7 +60,7 @@ if [[ $@ == *test* ]]; then
 elif [[ $@ == *debug* ]]; then
   echo "Building a Debug build"
   EXTRA_CFLAGS="\"-DSK_DEBUG\""
-  RELEASE_CONF="-O0 --js-opts 0 -sSAFE_HEAP=1 -sASSERTIONS=1 -g3 -DPATHKIT_TESTING -DSK_DEBUG"
+  RELEASE_CONF="-O0 --js-opts 0 -sSAFE_HEAP=1 -sASSERTIONS=2 -g3 -DPATHKIT_TESTING -DSK_DEBUG"
 fi
 
 WASM_CONF="-sWASM=1"

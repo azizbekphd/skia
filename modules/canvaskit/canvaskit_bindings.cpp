@@ -74,6 +74,9 @@
 #include <emscripten/bind.h>
 #include <emscripten/html5.h>
 #include <vector>
+#ifdef SK_DEBUG
+#include <sanitizer/lsan_interface.h>
+#endif
 
 #if defined(CK_ENABLE_WEBGL) || defined(CK_ENABLE_WEBGPU)
 #define ENABLE_GPU
@@ -348,6 +351,10 @@ sk_sp<SkSurface> MakeRenderTarget(sk_sp<GrDirectContext> dContext, SimpleImageIn
                                                       nullptr,
                                                       true));
     return surface;
+}
+
+sk_sp<SkImage> TextureFromImage(sk_sp<GrDirectContext> dContext, const sk_sp<SkImage>& image) {
+    return SkImages::TextureFromImage(dContext.get(), image.get());
 }
 #endif // CK_ENABLE_WEBGL
 
@@ -1125,6 +1132,12 @@ public:
     }
 };
 
+void doRecoverableLeakCheck() {
+#ifdef SK_DEBUG
+  __lsan_do_recoverable_leak_check();
+#endif
+}
+
 EMSCRIPTEN_BINDINGS(Skia) {
     class_<SkWStreamWrapper>("WStream")
         .constructor<>()
@@ -1138,6 +1151,8 @@ EMSCRIPTEN_BINDINGS(Skia) {
         .function("close", &SkPDFDocumentWrapper::close)
         .function("getStream", &SkPDFDocumentWrapper::getStream, emscripten::allow_raw_pointers());
 
+    function("_doRecoverableLeakCheck", &doRecoverableLeakCheck);
+
 #ifdef ENABLE_GPU
     constant("gpu", true);
     function("_MakeGrContext", &MakeGrContext);
@@ -1149,6 +1164,7 @@ EMSCRIPTEN_BINDINGS(Skia) {
     function("_MakeOnScreenGLSurface", select_overload<sk_sp<SkSurface>(sk_sp<GrDirectContext>, int, int, sk_sp<SkColorSpace>, int, int)>(&MakeOnScreenGLSurface));
     function("_MakeRenderTargetWH", select_overload<sk_sp<SkSurface>(sk_sp<GrDirectContext>, int, int)>(&MakeRenderTarget));
     function("_MakeRenderTargetII", select_overload<sk_sp<SkSurface>(sk_sp<GrDirectContext>, SimpleImageInfo)>(&MakeRenderTarget));
+    function("_TextureFromImage", select_overload<sk_sp<SkImage>(sk_sp<GrDirectContext>, const sk_sp<SkImage>&)>(&TextureFromImage));
 #endif // CK_ENABLE_WEBGL
 
 #ifdef CK_ENABLE_WEBGPU

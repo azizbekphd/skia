@@ -27,7 +27,7 @@ if [[ $@ == *debug_build* ]]; then
   echo "Building a Debug build"
   IS_DEBUG="true"
   EXTRA_CFLAGS="[\"-O1\"]"
-  EXTRA_LDFLAGS="[\"-sASSERTIONS=1\"]"
+  EXTRA_LDFLAGS="[\"-sASSERTIONS=2\",\"-fsanitize=leak\",\"-g\"]"
   IS_OFFICIAL_BUILD="false"
   BUILD_DIR=${BUILD_DIR:="out/canvaskit_wasm_debug"}
 elif [[ $@ == *profiling* ]]; then
@@ -249,7 +249,7 @@ echo "Compiling"
   skia_enable_ganesh=${ENABLE_GANESH} \
   skia_enable_graphite=${ENABLE_GRAPHITE} \
   skia_build_for_debugger=${DEBUGGER_ENABLED} \
-  skia_enable_skottie=${ENABLE_SKOTTIE} \
+  skia_enable_skottie=false \
   \
   ${GN_SHAPER} \
   ${GN_FONT} \

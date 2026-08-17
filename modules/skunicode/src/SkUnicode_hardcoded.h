@@ -20,6 +20,7 @@ public:
     bool isHardBreak(SkUnichar utf8) override;
     bool isEmoji(SkUnichar utf8) override;
     bool isEmojiComponent(SkUnichar utf8) override;
+    bool isEmojiPresentation(SkUnichar utf8) override;
     bool isEmojiModifierBase(SkUnichar utf8) override;
     bool isEmojiModifier(SkUnichar utf8) override;
     bool isRegionalIndicator(SkUnichar utf8) override;

@@ -1354,3 +1354,7 @@ CanvasKit.MakeVertices = function(mode, positions, textureCoordinates, colors,
   // Create the vertices, which owns the memory that the builder had allocated.
   return builder.detach();
 };
+
+CanvasKit.doRecoverableLeakCheck = function() {
+  return CanvasKit._doRecoverableLeakCheck()
+}

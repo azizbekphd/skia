@@ -443,6 +443,10 @@ class SkUnicode_icu : public SkUnicode {
         return sk_u_hasBinaryProperty(unichar, UCHAR_EMOJI_COMPONENT);
     }
 
+    bool isEmojiPresentation(SkUnichar unichar) override {
+        return sk_u_hasBinaryProperty(unichar, UCHAR_EMOJI_PRESENTATION);
+    }
+
     bool isEmojiModifierBase(SkUnichar unichar) override {
         return sk_u_hasBinaryProperty(unichar, UCHAR_EMOJI_MODIFIER_BASE);
     }

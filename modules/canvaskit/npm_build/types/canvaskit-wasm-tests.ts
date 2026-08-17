@@ -981,6 +981,9 @@ function surfaceTests(CK: CanvasKit, gl?: WebGLRenderingContext) {
     };
     surfaceFour.requestAnimationFrame(drawFrame);
     surfaceFour.drawOnce(drawFrame);
+    surfaceFour.drawImageCanvas2D(new Image(), 0, 0); // $ExpectType boolean
+    surfaceFour.drawImageCanvas2D(new Image(), 0, 0, 40, 80); // $ExpectType boolean
+    surfaceFour.drawImageCanvas2D(new Image(), 0, 0, 40, 80, 5, 10, 20, 40); // $ExpectType boolean
 
     surfaceFour.updateTextureFromSource(img5!, videoEle);
     surfaceFour.updateTextureFromSource(img5!, videoEle, true);

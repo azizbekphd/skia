@@ -154,6 +154,10 @@
         return surface;
       }
 
+      CanvasKit.TextureFromImage = function() {
+        return this._TextureFromImage(arguments[0], arguments[1]);
+      }
+
       // idOrElement can be of types:
       //  - String - in which case it is interpreted as an id of a
       //          canvas element.

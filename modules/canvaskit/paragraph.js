@@ -68,6 +68,19 @@
       typeface.delete();
     }
 
+    // Registers the font (provided as an arrayBuffer)
+    CanvasKit.TypefaceFontProvider.prototype.registerFontWithoutName = function(font) {
+      var typeface = CanvasKit.Typeface.MakeTypefaceFromData(font);
+      if (!typeface) {
+          Debug('Could not decode font data');
+          // We do not need to free the data since the C++ will do that for us
+          // when the font is deleted (or fails to decode);
+          return null;
+      }
+      this._registerFontWithoutName(typeface);
+      typeface.delete();
+    }
+
     // These helpers fill out all fields, because emscripten complains if we
     // have undefined and it expects, for example, a float.
     // TODO(kjlubick) For efficiency, we should probably just return opaque WASM objects so we do

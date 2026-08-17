@@ -142,6 +142,7 @@ class SKUNICODE_API SkUnicode : public SkRefCnt {
          **/
         virtual bool isEmoji(SkUnichar utf8) = 0;
         virtual bool isEmojiComponent(SkUnichar utf8) = 0;
+        virtual bool isEmojiPresentation(SkUnichar utf8) = 0;
         virtual bool isEmojiModifierBase(SkUnichar utf8) = 0;
         virtual bool isEmojiModifier(SkUnichar utf8) = 0;
         virtual bool isRegionalIndicator(SkUnichar utf8) = 0;

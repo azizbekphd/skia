@@ -105,6 +105,44 @@ sk_sp<SkTypeface> TypefaceFontStyleSet::matchStyle(const SkFontStyle& pattern) {
     return this->matchStyleCSS3(pattern);
 }
 
+TypefaceAndMatchScore TypefaceFontStyleSet::matchCharacter(
+        const SkFontStyle& style,
+        const char* bcp47[], int bcp47Count,
+        SkUnichar character) const {
+    TypefaceAndMatchScore result;
+    result.fMatchScore = -1;
+    result.fTypeface = nullptr;
+
+    for (int i = 0; i < fStyles.size(); ++i) {
+        const sk_sp<SkTypeface>& tf = fStyles[i];
+        if (!tf) { continue; }
+
+        const SkFontStyle& tfStyle = tf->fontStyle();
+        bool supportsChar = tf->unicharToGlyph(character) != 0;
+
+        if (supportsChar && tfStyle == style) {
+            result.fMatchScore = 16;
+            result.fTypeface = tf;
+            return result;
+        }
+
+        int score = 0;
+        if (supportsChar) {
+            score += 8;
+        }
+        if (tfStyle.width() == style.width()) score += 4;
+        if (tfStyle.slant() == style.slant()) score += 2;
+        if (tfStyle.weight() == style.weight()) score += 1;
+
+        if (score > result.fMatchScore) {
+            result.fMatchScore = score;
+            result.fTypeface = tf;
+        }
+    }
+
+    return result;
+}
+
 void TypefaceFontStyleSet::appendTypeface(sk_sp<SkTypeface> typeface) {
     if (typeface.get() != nullptr) {
         fStyles.emplace_back(std::move(typeface));

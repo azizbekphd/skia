@@ -44,7 +44,7 @@ DEBUG_OPTS = BASE_OPTS + [
     "--js-opts",
     "0",
     "-sSAFE_HEAP=1",
-    "-sASSERTIONS=1",
+    "-sASSERTIONS=2",
     "-g3",
     "-DPATHKIT_TESTING",
     "-DSK_DEBUG",

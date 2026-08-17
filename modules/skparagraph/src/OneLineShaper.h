@@ -22,7 +22,8 @@ public:
         , fBaselineShift(0.0f)
         , fAdvance(SkPoint::Make(0.0f, 0.0f))
         , fUnresolvedGlyphs(0)
-        , fUniqueRunId(paragraph->fRuns.size()){ }
+        , fUniqueRunId(paragraph->fRuns.size())
+        , fAllowEmojiSequences(false) { }
 
     bool shape();
 
@@ -120,6 +121,7 @@ private:
     SkVector fAdvance;
     size_t fUnresolvedGlyphs;
     size_t fUniqueRunId;
+    bool fAllowEmojiSequences;
 
     // TODO: Something that is not thead-safe since we don't need it
     std::shared_ptr<Run> fCurrentRun;

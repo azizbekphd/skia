@@ -19,7 +19,7 @@ EMAR=`which emar`
 if [[ $@ == *debug* ]]; then
   echo "Building a Debug build"
   EXTRA_CFLAGS="\"-DSK_DEBUG\","
-  RELEASE_CONF="-O0 --js-opts 0 -s DEMANGLE_SUPPORT=1 -s ASSERTIONS=1 -s GL_ASSERTIONS=1 -g4 \
+  RELEASE_CONF="-O0 --js-opts 0 -s DEMANGLE_SUPPORT=1 -s ASSERTIONS=2 -s GL_ASSERTIONS=1 -g4 \
                 --source-map-base /node_modules/debugger/bin/ -DSK_DEBUG"
   BUILD_DIR=${BUILD_DIR:="out/debugger_wasm_debug"}
 else
