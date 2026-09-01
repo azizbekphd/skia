@@ -151,7 +151,7 @@ build:canvaskit_full --noincompatible_enable_cc_toolchain_resolution \
                      --ck_enable_fonts --ck_enable_embedded_font \
                      \
                      --ck_enable_canvas_polyfill --ck_enable_skp_serialization --ck_enable_skottie \
-                     --ck_enable_runtime_effect --ck_enable_matrix_js \
+                     --ck_enable_runtime_effect --ck_enable_matrix_js --ck_enable_svg \
                      --cxxopt=-w
 
 build:ck_webgl2 --ck_enable_webgl

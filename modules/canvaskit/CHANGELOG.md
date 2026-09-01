@@ -6,8 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+ - Optional SVG DOM support for rendering normalized SVG directly to any CanvasKit canvas,
+   including PDF canvases. The API includes compatibility validation, data-URI images, and
+   SVG marker rendering. The supported normalized subset includes generated percentage-based HSL
+   colors and SVG 2 `<feDropShadow>` filters, and tolerates non-rendering CSSOM box-layout styles.
+
 ### Fixed
  - Fix compilation setting to keep up with [emsdk#24079](https://github.com/emscripten-core/emscripten/pull/24079)
+ - Preserve the public `instantiateWasm` and `locateFile` initialization hooks in Emscripten
+   builds.
+ - Keep CSS `drop-shadow()` SVG content vector when rendering to PDF canvases.
+ - Smooth vector SVG drop shadows without visibly repeating translated copies or over-emphasizing
+   the halo around thin shapes and text.
 
 ## [0.40.0] - 2025-03-31
 

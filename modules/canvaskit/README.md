@@ -167,3 +167,27 @@ in a (not checked in) `build` subfolder.
 
 Change directory to `//tools/run-wasm-gm-tests`. Run `make run_local`, which will put all PNGs
 produced by GMs into `/tmp/wasm-gmtests` and run all unit tests.
+
+## Rendering SVG
+
+Build CanvasKit normally to include SVG support, or pass `no_svg` to `compile.sh` to omit it.
+SVG documents render directly to any CanvasKit canvas, including a PDF page canvas:
+
+```js
+const errors = [];
+const svg = CanvasKit.SVGDOM.MakeFromString(svgText, fontMgr, {
+  onError: (message) => errors.push(message),
+});
+if (!svg) {
+  // Draw the existing raster fallback.
+} else {
+  svg.setContainerSize(width, height);
+  if (!svg.render(canvas)) {
+    // Draw the existing raster fallback.
+  }
+  svg.delete();
+}
+```
+
+Callers must flatten stylesheet rules and resolve `<switch>` before parsing. External resources
+are rejected; embedded raster images must use data URIs.

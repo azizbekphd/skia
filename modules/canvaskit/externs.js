@@ -482,6 +482,14 @@ var CanvasKit = {
     _fromData: function() {},
   },
 
+  SVGDOM: {
+    MakeFromString: function() {},
+    _MakeFromString: function() {},
+    setContainerSize: function() {},
+    validate: function() {},
+    render: function() {},
+  },
+
   TypefaceFontProvider: {
     // public API (from C++ and JS bindings)
     Make: function() {},

@@ -9,10 +9,33 @@
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
+#include "include/core/SkPath.h"
 #include "include/core/SkRect.h"
 #include "modules/svg/include/SkSVGAttribute.h"
 #include "modules/svg/include/SkSVGRenderContext.h"
 #include "modules/svg/include/SkSVGValue.h"
+
+#include <cstring>
+
+bool SkSVGSVG::parseAndSetAttribute(const char* name, const char* value) {
+    if (INHERITED::parseAndSetAttribute(name, value)) {
+        return true;
+    }
+    if (strcmp(name, "overflow")) {
+        return false;
+    }
+    if (!strcmp(value, "visible")) {
+        this->setOverflow(SkSVGOverflow::kVisible);
+        return true;
+    }
+    if (!strcmp(value, "hidden") || !strcmp(value, "clip") ||
+        !strcmp(value, "auto") || !strcmp(value, "scroll")) {
+        this->setOverflow(SkSVGOverflow::kClip);
+        return true;
+    }
+    return false;
+}
 
 void SkSVGSVG::renderNode(const SkSVGRenderContext& ctx, const SkSVGIRI& iri) const {
     SkSVGRenderContext localContext(ctx, this);
@@ -39,6 +62,13 @@ bool SkSVGSVG::onPrepareToRender(SkSVGRenderContext* ctx) const {
     auto contentMatrix = SkMatrix::Translate(viewPortRect.x(), viewPortRect.y());
     auto viewPort      = SkSize::Make(viewPortRect.width(), viewPortRect.height());
 
+    if (fOverflow == SkSVGOverflow::kClip) {
+        ctx->saveOnce();
+        SkPath clipPath = SkPath::Rect(viewPortRect);
+        this->mapToParent(&clipPath);
+        ctx->canvas()->clipPath(clipPath, true);
+    }
+
     if (fViewBox.isValid()) {
         const SkRect& viewBox = *fViewBox;
 
@@ -63,6 +93,18 @@ bool SkSVGSVG::onPrepareToRender(SkSVGRenderContext* ctx) const {
     }
 
     return this->INHERITED::onPrepareToRender(ctx);
+}
+
+void SkSVGSVG::onRender(const SkSVGRenderContext& ctx) const {
+    if (fBackgroundColor.isValid() && SkColorGetA(*fBackgroundColor) != 0) {
+        SkPaint paint;
+        paint.setColor(*fBackgroundColor);
+        const SkRect backgroundBounds = fViewBox.isValid()
+                                                ? *fViewBox
+                                                : SkRect::MakeSize(ctx.lengthContext().viewPort());
+        ctx.canvas()->drawRect(backgroundBounds, paint);
+    }
+    this->INHERITED::onRender(ctx);
 }
 
 void SkSVGSVG::onSetAttribute(SkSVGAttribute attr, const SkSVGValue& v) {

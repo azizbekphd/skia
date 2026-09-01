@@ -11,6 +11,8 @@
 #include "include/core/SkFontMgr.h"
 #include "include/core/SkFourByteTag.h"
 #include "include/core/SkM44.h"
+#include "include/core/SkMatrix.h"
+#include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkRect.h"
 #include "include/core/SkRefCnt.h"
@@ -34,6 +36,7 @@
 class SkCanvas;
 class SkPaint;
 class SkString;
+class SkUnicode;
 namespace skresources { class ResourceProvider; }
 
 class SK_API SkSVGLengthContext {
@@ -68,6 +71,14 @@ struct SK_API SkSVGPresentationContext {
 
     // Inherited presentation attributes, computed for the current node.
     SkSVGPresentationAttributes fInherited;
+    // Context paints are resolved in the context element's coordinate and OBB scope before
+    // entering a marker or use instance. Besides preserving paint-server coordinates, storing
+    // concrete paints makes recursive context-fill/context-stroke references terminate when the
+    // outermost context element has no context paint of its own. The source CTM lets shaders
+    // compensate for transforms subsequently established by the instance subtree.
+    SkTLazy<SkPaint> fContextFill;
+    SkTLazy<SkPaint> fContextStroke;
+    SkMatrix         fContextPaintCTM = SkMatrix::I();
 };
 
 class SK_API SkSVGRenderContext {
@@ -97,8 +108,30 @@ public:
 
     const SkSVGPresentationContext& presentationContext() const { return *fPresentationContext; }
 
+    void setInheritedPresentation(const SkSVGPresentationAttributes& inherited) {
+        fPresentationContext.writable()->fInherited = inherited;
+    }
+
+    void setContextPaints(const SkSVGRenderContext& contextElement);
+
     SkCanvas* canvas() const { return fCanvas; }
     void saveOnce();
+
+    // Used while replaying a CSS drop-shadow as vector drawing commands. Suppression is scoped
+    // to one node so filters on descendants still render normally.
+    void suppressFilterForNode(const SkSVGNode* node) { fSuppressedFilterNode = node; }
+    bool isFilterSuppressedForNode(const SkSVGNode* node) const {
+        return fSuppressedFilterNode == node;
+    }
+
+    // Records a CSS filter offset after the target node has established its local coordinate
+    // system. This keeps filter lengths subject to the node's transform and viewport mapping.
+    void setDropShadowOffsetForNode(const SkSVGNode* node, SkScalar dx, SkScalar dy) {
+        fDropShadowOffsetNode = node;
+        fDropShadowOffsetX = dx;
+        fDropShadowOffsetY = dy;
+    }
+    void applyDropShadowOffsetForNode(const SkSVGNode* node);
 
     enum ApplyFlags {
         kLeaf = 1 << 0, // the target node doesn't have descendants
@@ -178,6 +211,11 @@ public:
         return fTextShapingFactory->makeShaper(this->fontMgr());
     }
 
+    SkUnicode* unicode() const {
+        SkASSERT(fTextShapingFactory);
+        return fTextShapingFactory->getUnicode();
+    }
+
     std::unique_ptr<SkShaper::BiDiRunIterator> makeBidiRunIterator(const char* utf8,
                                                                    size_t utf8Bytes,
                                                                    uint8_t bidiLevel) const {
@@ -218,6 +256,11 @@ private:
 
     // clipPath, if present for the current context (not inherited).
     SkTLazy<SkPath>                               fClipPath;
+
+    const SkSVGNode*                              fSuppressedFilterNode = nullptr;
+    const SkSVGNode*                              fDropShadowOffsetNode = nullptr;
+    SkScalar                                      fDropShadowOffsetX = 0;
+    SkScalar                                      fDropShadowOffsetY = 0;
 
     // Deferred opacity optimization for leaf nodes.
     float                                         fDeferredPaintOpacity = 1;

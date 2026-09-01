@@ -64,6 +64,8 @@ build --flag_alias=ck_enable_matrix_js=//modules/canvaskit:include_matrix_js
 build --flag_alias=ck_disable_matrix_js=no//modules/canvaskit:include_matrix_js
 build --flag_alias=ck_enable_skottie=//modules/canvaskit:enable_skottie
 build --flag_alias=ck_disable_skottie=no//modules/canvaskit:enable_skottie
+build --flag_alias=ck_enable_svg=//modules/canvaskit:enable_svg
+build --flag_alias=ck_disable_svg=no//modules/canvaskit:enable_svg
 build --flag_alias=ck_enable_skp_serialization=//modules/canvaskit:enable_skp_serialization
 build --flag_alias=ck_disable_skp_serialization=no//modules/canvaskit:enable_skp_serialization
 build --flag_alias=ck_enable_runtime_effect=//modules/canvaskit:enable_runtime_effect

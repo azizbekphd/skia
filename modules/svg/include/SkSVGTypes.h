@@ -227,6 +227,8 @@ public:
         kNone,
         kColor,
         kIRI,
+        kContextFill,
+        kContextStroke,
     };
 
     SkSVGPaint() : fType(Type::kNone), fColor(SK_ColorBLACK) {}
@@ -260,29 +262,70 @@ private:
     SkSVGIRI   fIRI;
 };
 
-// <funciri> | none (used for clip/mask/filter properties)
+enum class SkSVGMarkerUnits {
+    kStrokeWidth,
+    kUserSpaceOnUse,
+};
+
+class SK_API SkSVGOrient {
+public:
+    enum class Type { kAngle, kAuto, kAutoStartReverse };
+
+    SkSVGOrient() = default;
+    explicit SkSVGOrient(Type type) : fType(type) {}
+    explicit SkSVGOrient(SkScalar angle) : fType(Type::kAngle), fAngle(angle) {}
+
+    Type type() const { return fType; }
+    SkScalar angle() const { return fAngle; }
+
+private:
+    Type fType = Type::kAngle;
+    SkScalar fAngle = 0;
+};
+
+struct SkSVGDropShadow {
+    SkScalar fDx = 0;
+    SkScalar fDy = 0;
+    SkScalar fSigma = 0;
+    SkColor  fColor = SK_ColorBLACK;
+
+    bool operator==(const SkSVGDropShadow& other) const {
+        return fDx == other.fDx && fDy == other.fDy && fSigma == other.fSigma &&
+               fColor == other.fColor;
+    }
+};
+
+// <funciri> | none, plus the CSS drop-shadow() filter function.
 class SK_API SkSVGFuncIRI {
 public:
     enum class Type {
         kNone,
         kIRI,
+        kDropShadow,
     };
 
     SkSVGFuncIRI() : fType(Type::kNone) {}
     explicit SkSVGFuncIRI(Type t) : fType(t) {}
     explicit SkSVGFuncIRI(SkSVGIRI&& iri) : fType(Type::kIRI), fIRI(std::move(iri)) {}
+    explicit SkSVGFuncIRI(const SkSVGDropShadow& shadow)
+        : fType(Type::kDropShadow), fDropShadow(shadow) {}
 
     bool operator==(const SkSVGFuncIRI& other) const {
-        return fType == other.fType && fIRI == other.fIRI;
+        return fType == other.fType && fIRI == other.fIRI && fDropShadow == other.fDropShadow;
     }
     bool operator!=(const SkSVGFuncIRI& other) const { return !(*this == other); }
 
     Type type() const { return fType; }
     const SkSVGIRI& iri() const { SkASSERT(fType == Type::kIRI); return fIRI; }
+    const SkSVGDropShadow& dropShadow() const {
+        SkASSERT(fType == Type::kDropShadow);
+        return fDropShadow;
+    }
 
 private:
-    Type           fType;
-    SkSVGIRI       fIRI;
+    Type              fType;
+    SkSVGIRI          fIRI;
+    SkSVGDropShadow   fDropShadow;
 };
 
 enum class SkSVGLineCap {
@@ -629,6 +672,57 @@ public:
 
 private:
     Type fType;
+};
+
+class SK_API SkSVGTextDecoration {
+public:
+    enum Type : uint8_t {
+        kNone        = 0,
+        kUnderline   = 1 << 0,
+        kOverline    = 1 << 1,
+        kLineThrough = 1 << 2,
+    };
+
+    SkSVGTextDecoration() : fTypes(kNone) {}
+    explicit SkSVGTextDecoration(uint8_t types) : fTypes(types) {}
+
+    bool has(Type type) const { return (fTypes & type) != 0; }
+
+    bool operator==(const SkSVGTextDecoration& other) const {
+        return fTypes == other.fTypes;
+    }
+    bool operator!=(const SkSVGTextDecoration& other) const { return !(*this == other); }
+
+private:
+    uint8_t fTypes;
+};
+
+enum class SkSVGLengthAdjust {
+    kSpacing,
+};
+
+enum class SkSVGDominantBaseline {
+    kAuto,
+    kAlphabetic,
+    kMiddle,
+    kCentral,
+    kHanging,
+    kMathematical,
+};
+
+enum class SkSVGAlignmentBaseline {
+    kAuto,
+    kBaseline,
+    kAlphabetic,
+    kMiddle,
+    kCentral,
+    kHanging,
+    kMathematical,
+};
+
+enum class SkSVGOverflow {
+    kVisible,
+    kClip,
 };
 
 // https://www.w3.org/TR/SVG11/filters.html#FilterPrimitiveInAttribute

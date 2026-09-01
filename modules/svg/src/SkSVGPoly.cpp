@@ -27,6 +27,7 @@ bool SkSVGPoly::parseAndSetAttribute(const char* n, const char* v) {
         // TODO: we can likely just keep the points array and create the SkPath when needed.
         // only polygons are auto-closed
         fPath = SkPath::Polygon(fPoints, this->tag() == SkSVGTag::kPolygon);
+        return true;
     }
 
     // No other attributes on this node

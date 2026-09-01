@@ -87,6 +87,18 @@ if [[ $@ == *viewer* ]]; then
   IS_OFFICIAL_BUILD="false"
 fi
 
+ENABLE_SVG="true"
+if [[ $@ == *no_svg* ]]; then
+  echo "Omitting SVG DOM support"
+  ENABLE_SVG="false"
+fi
+if [[ $@ == *no_font* ]]; then
+  ENABLE_SVG="false"
+fi
+if [[ ${ENABLE_SVG} == "true" ]]; then
+  USE_EXPAT="true"
+fi
+
 ENABLE_PATHOPS="true"
 if [[ $@ == *no_pathops* ]] ; then
   # This saves about 2kb compressed.
@@ -275,6 +287,7 @@ echo "Compiling"
   skia_canvaskit_enable_paragraph=${ENABLE_PARAGRAPH} \
   skia_canvaskit_enable_bidi=${ENABLE_BIDI} \
   skia_canvaskit_enable_webgl=${ENABLE_WEBGL} \
-  skia_canvaskit_enable_webgpu=${ENABLE_WEBGPU}"
+  skia_canvaskit_enable_webgpu=${ENABLE_WEBGPU} \
+  skia_canvaskit_enable_svg=${ENABLE_SVG}"
 
 ${NINJA} -C ${BUILD_DIR} canvaskit.js -k 10

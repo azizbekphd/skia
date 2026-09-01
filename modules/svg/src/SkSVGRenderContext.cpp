@@ -14,8 +14,10 @@
 #include "include/core/SkPaint.h"
 #include "include/core/SkPath.h"
 #include "include/core/SkPathEffect.h"
+#include "include/core/SkShader.h"
 #include "include/core/SkString.h"
 #include "include/effects/SkDashPathEffect.h"
+#include "include/effects/SkImageFilters.h"
 #include "include/private/base/SkDebug.h"
 #include "include/private/base/SkSpan_impl.h"
 #include "include/private/base/SkTArray.h"
@@ -182,7 +184,12 @@ SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other)
                              *other.fLengthContext,
                              *other.fPresentationContext,
                              other.fOBBScope,
-                             other.fTextShapingFactory) {}
+                             other.fTextShapingFactory) {
+    fSuppressedFilterNode = other.fSuppressedFilterNode;
+    fDropShadowOffsetNode = other.fDropShadowOffsetNode;
+    fDropShadowOffsetX = other.fDropShadowOffsetX;
+    fDropShadowOffsetY = other.fDropShadowOffsetY;
+}
 
 SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, SkCanvas* canvas)
         : SkSVGRenderContext(canvas,
@@ -192,7 +199,12 @@ SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, SkCanvas
                              *other.fLengthContext,
                              *other.fPresentationContext,
                              other.fOBBScope,
-                             other.fTextShapingFactory) {}
+                             other.fTextShapingFactory) {
+    fSuppressedFilterNode = other.fSuppressedFilterNode;
+    fDropShadowOffsetNode = other.fDropShadowOffsetNode;
+    fDropShadowOffsetX = other.fDropShadowOffsetX;
+    fDropShadowOffsetY = other.fDropShadowOffsetY;
+}
 
 SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, const SkSVGNode* node)
         : SkSVGRenderContext(other.fCanvas,
@@ -202,10 +214,30 @@ SkSVGRenderContext::SkSVGRenderContext(const SkSVGRenderContext& other, const Sk
                              *other.fLengthContext,
                              *other.fPresentationContext,
                              OBBScope{node, this},
-                             other.fTextShapingFactory) {}
+                             other.fTextShapingFactory) {
+    fSuppressedFilterNode = other.fSuppressedFilterNode;
+    fDropShadowOffsetNode = other.fDropShadowOffsetNode;
+    fDropShadowOffsetX = other.fDropShadowOffsetX;
+    fDropShadowOffsetY = other.fDropShadowOffsetY;
+}
 
 SkSVGRenderContext::~SkSVGRenderContext() {
     fCanvas->restoreToCount(fCanvasSaveCount);
+}
+
+void SkSVGRenderContext::applyDropShadowOffsetForNode(const SkSVGNode* node) {
+    if (fDropShadowOffsetNode == node && (fDropShadowOffsetX != 0 || fDropShadowOffsetY != 0)) {
+        this->saveOnce();
+        fCanvas->translate(fDropShadowOffsetX, fDropShadowOffsetY);
+    }
+}
+
+void SkSVGRenderContext::setContextPaints(const SkSVGRenderContext& contextElement) {
+    const auto& inherited = contextElement.presentationContext().fInherited;
+    auto* presentation = fPresentationContext.writable();
+    presentation->fContextFill = contextElement.commonPaint(*inherited.fFill, 1);
+    presentation->fContextStroke = contextElement.commonPaint(*inherited.fStroke, 1);
+    presentation->fContextPaintCTM = contextElement.canvas()->getLocalToDeviceAs3x3();
 }
 
 SkSVGRenderContext::BorrowedNode SkSVGRenderContext::findNodeById(const SkSVGIRI& iri) const {
@@ -246,7 +278,11 @@ void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttr
     ApplyLazyInheritedAttribute(StrokeMiterLimit);
     ApplyLazyInheritedAttribute(StrokeOpacity);
     ApplyLazyInheritedAttribute(StrokeWidth);
+    ApplyLazyInheritedAttribute(MarkerStart);
+    ApplyLazyInheritedAttribute(MarkerMid);
+    ApplyLazyInheritedAttribute(MarkerEnd);
     ApplyLazyInheritedAttribute(TextAnchor);
+    ApplyLazyInheritedAttribute(TextDecoration);
     ApplyLazyInheritedAttribute(Visibility);
     ApplyLazyInheritedAttribute(Color);
     ApplyLazyInheritedAttribute(ColorInterpolation);
@@ -256,7 +292,8 @@ void SkSVGRenderContext::applyPresentationAttributes(const SkSVGPresentationAttr
 
     // Uninherited attributes.  Only apply to the current context.
 
-    const bool hasFilter = attrs.fFilter.isValue();
+    const bool suppressFilter = fSuppressedFilterNode == fOBBScope.fNode;
+    const bool hasFilter = attrs.fFilter.isValue() && !suppressFilter;
     if (attrs.fOpacity.isValue()) {
         this->applyOpacity(*attrs.fOpacity, flags, hasFilter);
     }
@@ -311,6 +348,18 @@ void SkSVGRenderContext::applyOpacity(SkScalar opacity, uint32_t flags, bool has
 }
 
 void SkSVGRenderContext::applyFilter(const SkSVGFuncIRI& filter) {
+    if (filter.type() == SkSVGFuncIRI::Type::kDropShadow) {
+        const auto& shadow = filter.dropShadow();
+        SkPaint filterPaint;
+        filterPaint.setImageFilter(SkImageFilters::DropShadow(shadow.fDx,
+                                                              shadow.fDy,
+                                                              shadow.fSigma,
+                                                              shadow.fSigma,
+                                                              shadow.fColor,
+                                                              nullptr));
+        fCanvas->saveLayer(nullptr, &filterPaint);
+        return;
+    }
     if (filter.type() != SkSVGFuncIRI::Type::kIRI) {
         return;
     }
@@ -435,8 +484,32 @@ SkTLazy<SkPaint> SkSVGRenderContext::commonPaint(const SkSVGPaint& paint_selecto
             p->setColor(this->resolveSvgColor(paint_selector.color()));
         }
     } break;
+    case SkSVGPaint::Type::kContextFill:
+        if (!fPresentationContext->fContextFill.isValid()) {
+            return SkTLazy<SkPaint>();
+        }
+        p.set(*fPresentationContext->fContextFill);
+        break;
+    case SkSVGPaint::Type::kContextStroke:
+        if (!fPresentationContext->fContextStroke.isValid()) {
+            return SkTLazy<SkPaint>();
+        }
+        p.set(*fPresentationContext->fContextStroke);
+        break;
     default:
         SkUNREACHABLE;
+    }
+
+    if ((paint_selector.type() == SkSVGPaint::Type::kContextFill ||
+         paint_selector.type() == SkSVGPaint::Type::kContextStroke) &&
+        p->getShader()) {
+        const SkMatrix currentCTM = fCanvas->getLocalToDeviceAs3x3();
+        SkMatrix localMatrix;
+        if (currentCTM != fPresentationContext->fContextPaintCTM &&
+            currentCTM.invert(&localMatrix)) {
+            localMatrix.preConcat(fPresentationContext->fContextPaintCTM);
+            p->setShader(p->getShader()->makeWithLocalMatrix(localMatrix));
+        }
     }
 
     p->setAntiAlias(true); // TODO: shape-rendering support

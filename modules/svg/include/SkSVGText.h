@@ -48,6 +48,10 @@ public:
     SVG_ATTR(Dx, std::vector<SkSVGLength>, {})
     SVG_ATTR(Dy, std::vector<SkSVGLength>, {})
     SVG_ATTR(Rotate, std::vector<SkSVGNumberType>, {})
+    SVG_OPTIONAL_ATTR(TextLength, SkSVGLength)
+    SVG_ATTR(LengthAdjust, SkSVGLengthAdjust, SkSVGLengthAdjust::kSpacing)
+    SVG_ATTR(DominantBaseline, SkSVGDominantBaseline, SkSVGDominantBaseline::kAuto)
+    SVG_ATTR(AlignmentBaseline, SkSVGAlignmentBaseline, SkSVGAlignmentBaseline::kAuto)
 
     SVG_ATTR(XmlSpace, SkSVGXmlSpace, SkSVGXmlSpace::kDefault)
 

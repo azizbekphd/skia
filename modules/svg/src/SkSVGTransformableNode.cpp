@@ -45,6 +45,15 @@ void SkSVGTransformableNode::mapToParent(SkPath* path) const {
     path->transform(fTransform);
 }
 
+bool SkSVGTransformableNode::mapToLocal(SkPath* path) const {
+    SkMatrix inverse;
+    if (!fTransform.invert(&inverse)) {
+        return false;
+    }
+    path->transform(inverse);
+    return true;
+}
+
 void SkSVGTransformableNode::mapToParent(SkRect* rect) const {
     *rect = fTransform.mapRect(*rect);
 }
@@ -61,4 +70,3 @@ SkRect SkSVGTransformableNode::onObjectBoundingBox(const SkSVGRenderContext& ctx
     }
     return obb;
 }
-

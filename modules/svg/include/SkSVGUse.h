@@ -30,9 +30,14 @@ public:
 
     SVG_ATTR(X   , SkSVGLength, SkSVGLength(0))
     SVG_ATTR(Y   , SkSVGLength, SkSVGLength(0))
+    SVG_ATTR(Width, SkSVGLength, SkSVGLength(100, SkSVGLength::Unit::kPercentage))
+    SVG_ATTR(Height, SkSVGLength, SkSVGLength(100, SkSVGLength::Unit::kPercentage))
     SVG_ATTR(Href, SkSVGIRI   , SkSVGIRI())
 
 protected:
+    // Although <use> has no literal children, it renders a referenced subtree. Treat it as a
+    // container so group effects such as opacity are applied around that subtree.
+    bool hasChildren() const override { return true; }
     bool onPrepareToRender(SkSVGRenderContext*) const override;
     void onRender(const SkSVGRenderContext&) const override;
     SkPath onAsPath(const SkSVGRenderContext&) const override;

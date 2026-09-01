@@ -49,6 +49,7 @@ CanvasKitInit({locateFile: (file: string) => '/node_modules/canvaskit/bin/' + fi
     skottieTests(CK);
     shaderTests(CK);
     surfaceTests(CK);
+    svgTests(CK);
     textBlobTests(CK);
     typefaceTests(CK);
     vectorTests(CK);
@@ -1011,6 +1012,18 @@ function typefaceTests(CK: CanvasKit) {
     const face2 = CK.Typeface.GetDefault(); // $ExpectType Typeface | null
     const ids = face!.getGlyphIDs('abcd');
     face!.getGlyphIDs('efgh', 4, ids);
+}
+
+function svgTests(CK: CanvasKit, canvas?: Canvas, fontMgr?: FontMgr) {
+    if (!canvas) return;
+    const warnings: string[] = [];
+    const logger = { onWarning: (message: string) => warnings.push(message) };
+    const dom = CK.SVGDOM.MakeFromString('<svg width="10" height="10"><path d="M0 0L10 10"/></svg>', fontMgr, logger); // $ExpectType SVGDOM | null
+    if (!dom) return;
+    dom.setContainerSize(10, 10);
+    const valid = dom.validate(); // $ExpectType boolean
+    const rendered = dom.render(canvas); // $ExpectType boolean
+    dom.delete();
 }
 
 function vectorTests(CK: CanvasKit) {

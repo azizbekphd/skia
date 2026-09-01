@@ -16,6 +16,8 @@
 #include "modules/svg/include/SkSVGTypes.h"
 #include "src/base/SkUTF.h"
 
+#include <algorithm>
+#include <cmath>
 #include <math.h>
 #include <utility>
 
@@ -254,6 +256,13 @@ bool SkSVGAttributeParser::parseNamedColorToken(SkColor* c) {
     if (!this->parseIdentToken(&ident)) {
         return false;
     }
+    // CSS Color defines transparent as a fully transparent color. SkParse's named-color table
+    // intentionally contains only opaque CSS color names.
+    if (!strcmp(ident.c_str(), "transparent")) {
+        *c = SK_ColorTRANSPARENT;
+        restoreCurPos.clear();
+        return true;
+    }
     if (!SkParse::FindNamedColor(ident.c_str(), ident.size(), c)) {
         return false;
     }
@@ -275,21 +284,31 @@ bool SkSVGAttributeParser::parseHexColorToken(SkColor* c) {
     SkParse::FindHex(hexString.c_str(), &v);
 
     switch (hexString.size()) {
-    case 6:
-        // matched #xxxxxxx
+    case 8: // CSS Color 4: #RRGGBBAA
+        *c = SkColorSetARGB(v & 0xff, (v >> 24) & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff);
         break;
+    case 6:
+        *c = v | 0xff000000;
+        break;
+    case 4: { // CSS Color 4: #RGBA
+        const auto expand = [](uint32_t nibble) { return (nibble << 4) | nibble; };
+        *c = SkColorSetARGB(expand(v & 0xf),
+                            expand((v >> 12) & 0xf),
+                            expand((v >> 8) & 0xf),
+                            expand((v >> 4) & 0xf));
+        break;
+    }
     case 3:
-        // matched '#xxx;
         v = ((v << 12) & 0x00f00000) |
             ((v <<  8) & 0x000ff000) |
             ((v <<  4) & 0x00000ff0) |
             ((v <<  0) & 0x0000000f);
+        *c = v | 0xff000000;
         break;
     default:
         return false;
     }
 
-    *c = v | 0xff000000;
     fCurPos = hexEnd;
 
     restoreCurPos.clear();
@@ -383,11 +402,75 @@ bool SkSVGAttributeParser::parseRGBAColorToken(SkColor* c) {
     }, c);
 }
 
+bool SkSVGAttributeParser::parseHSLColorToken(SkColor* c,
+                                              const char* functionName,
+                                              bool alphaRequired) {
+    return this->parseParenthesized(functionName, [this, alphaRequired](SkColor* c) -> bool {
+        SkScalar hue, saturation, lightness;
+        if (!this->parseScalarToken(&hue) ||
+            !this->parseSepToken() ||
+            !this->parseScalarToken(&saturation) ||
+            !this->parseExpectedStringToken("%") ||
+            !this->parseSepToken() ||
+            !this->parseScalarToken(&lightness) ||
+            !this->parseExpectedStringToken("%")) {
+            return false;
+        }
+
+        SkScalar alpha = 1;
+        {
+            RestoreCurPos alphaRestore(this);
+            if (this->parseSepToken() && this->parseScalarToken(&alpha)) {
+                if (this->parseExpectedStringToken("%")) {
+                    alpha /= 100;
+                }
+                alphaRestore.clear();
+            } else if (alphaRequired) {
+                return false;
+            }
+        }
+
+        hue = std::fmod(hue, 360.0f);
+        if (hue < 0) {
+            hue += 360.0f;
+        }
+        saturation = std::clamp(saturation / 100.0f, 0.0f, 1.0f);
+        lightness = std::clamp(lightness / 100.0f, 0.0f, 1.0f);
+        alpha = std::clamp(alpha, 0.0f, 1.0f);
+
+        const SkScalar chroma = (1 - std::abs(2 * lightness - 1)) * saturation;
+        const SkScalar h = hue / 60.0f;
+        const SkScalar x = chroma * (1 - std::abs(std::fmod(h, 2.0f) - 1));
+        SkScalar r = 0, g = 0, b = 0;
+        if (h < 1) {
+            r = chroma; g = x;
+        } else if (h < 2) {
+            r = x; g = chroma;
+        } else if (h < 3) {
+            g = chroma; b = x;
+        } else if (h < 4) {
+            g = x; b = chroma;
+        } else if (h < 5) {
+            r = x; b = chroma;
+        } else {
+            r = chroma; b = x;
+        }
+        const SkScalar m = lightness - chroma * 0.5f;
+        *c = SkColorSetARGB(SkScalarRoundToInt(alpha * 255),
+                            SkScalarRoundToInt((r + m) * 255),
+                            SkScalarRoundToInt((g + m) * 255),
+                            SkScalarRoundToInt((b + m) * 255));
+        return true;
+    }, c);
+}
+
 bool SkSVGAttributeParser::parseColorToken(SkColor* c) {
     return this->parseHexColorToken(c) ||
            this->parseNamedColorToken(c) ||
            this->parseRGBAColorToken(c) ||
-           this->parseRGBColorToken(c);
+           this->parseRGBColorToken(c) ||
+           this->parseHSLColorToken(c, "hsla", true) ||
+           this->parseHSLColorToken(c, "hsl", false);
 }
 
 bool SkSVGAttributeParser::parseSVGColorType(SkSVGColorType* color) {
@@ -466,6 +549,13 @@ bool SkSVGAttributeParser::parse(SkSVGIRI* iri) {
     // consume preceding whitespace
     this->parseWSToken();
 
+    char quote = '\0';
+    if (this->parseExpectedStringToken("\"")) {
+        quote = '\"';
+    } else if (this->parseExpectedStringToken("'")) {
+        quote = '\'';
+    }
+
     SkSVGIRI::Type iriType;
     if (this->parseExpectedStringToken("#")) {
         iriType = SkSVGIRI::Type::kLocal;
@@ -476,10 +566,28 @@ bool SkSVGAttributeParser::parse(SkSVGIRI* iri) {
     }
 
     const auto* start = fCurPos;
-    if (!this->advanceWhile([](char c) -> bool { return c != ')'; })) {
+    if (quote) {
+        this->advanceWhile([quote](char c) -> bool { return c != quote; });
+        if (fCurPos == start || fCurPos == fEndPos || *fCurPos != quote) {
+            return false;
+        }
+    } else if (!this->advanceWhile([](char c) -> bool { return c != ')'; })) {
         return false;
     }
-    *iri = SkSVGIRI(iriType, SkString(start, fCurPos - start));
+    const char* iriEnd = fCurPos;
+    if (!quote) {
+        while (iriEnd > start && iriEnd[-1] <= ' ') {
+            --iriEnd;
+        }
+    }
+    if (iriEnd == start) {
+        return false;
+    }
+    *iri = SkSVGIRI(iriType, SkString(start, iriEnd - start));
+    if (quote) {
+        ++fCurPos;
+        this->parseWSToken();
+    }
     return true;
 }
 
@@ -742,6 +850,12 @@ bool SkSVGAttributeParser::parse(SkSVGPaint* paint) {
     } else if (this->parseExpectedStringToken("none")) {
         *paint = SkSVGPaint(SkSVGPaint::Type::kNone);
         parsedValue = true;
+    } else if (this->parseExpectedStringToken("context-fill")) {
+        *paint = SkSVGPaint(SkSVGPaint::Type::kContextFill);
+        parsedValue = true;
+    } else if (this->parseExpectedStringToken("context-stroke")) {
+        *paint = SkSVGPaint(SkSVGPaint::Type::kContextStroke);
+        parsedValue = true;
     } else if (this->parseFuncIRI(&iri)) {
         // optional fallback color
         this->parseWSToken();
@@ -756,6 +870,65 @@ bool SkSVGAttributeParser::parse(SkSVGPaint* paint) {
 // https://www.w3.org/TR/SVG11/masking.html#ClipPathProperty
 // https://www.w3.org/TR/SVG11/masking.html#MaskProperty
 // https://www.w3.org/TR/SVG11/filters.html#FilterProperty
+static bool parse_drop_shadow_arguments(const SkString& arguments, SkSVGDropShadow* shadow) {
+    std::vector<SkString> tokens;
+    const char* start = arguments.c_str();
+    const char* current = start;
+    int depth = 0;
+    while (true) {
+        const char c = *current;
+        if (c == '(') {
+            ++depth;
+        } else if (c == ')') {
+            --depth;
+        }
+        if ((c == '\0' || (c <= ' ' && depth == 0)) && current != start) {
+            tokens.emplace_back(start, current - start);
+        }
+        if (c == '\0') {
+            break;
+        }
+        if (c <= ' ' && depth == 0) {
+            do {
+                ++current;
+            } while (*current <= ' ' && *current != '\0');
+            start = current;
+            continue;
+        }
+        ++current;
+    }
+
+    std::vector<SkScalar> lengths;
+    SkColor color = SK_ColorBLACK;
+    bool hasColor = false;
+    for (const auto& token : tokens) {
+        const auto length = SkSVGAttributeParser::parse<SkSVGLength>(token.c_str());
+        if (length.isValid() &&
+            (length->unit() == SkSVGLength::Unit::kNumber ||
+             length->unit() == SkSVGLength::Unit::kPX)) {
+            lengths.push_back(length->value());
+            continue;
+        }
+
+        const auto parsedColor = SkSVGAttributeParser::parse<SkSVGColorType>(token.c_str());
+        if (!parsedColor.isValid() || hasColor) {
+            return false;
+        }
+        color = *parsedColor;
+        hasColor = true;
+    }
+
+    if (lengths.size() < 2 || lengths.size() > 3 ||
+        (lengths.size() == 3 && lengths[2] < 0)) {
+        return false;
+    }
+    shadow->fDx = lengths[0];
+    shadow->fDy = lengths[1];
+    shadow->fSigma = lengths.size() == 3 ? lengths[2] : 0;
+    shadow->fColor = color;
+    return true;
+}
+
 template <>
 bool SkSVGAttributeParser::parse(SkSVGFuncIRI* firi) {
     SkSVGStringType iri;
@@ -766,6 +939,26 @@ bool SkSVGAttributeParser::parse(SkSVGFuncIRI* firi) {
         parsedValue = true;
     } else if (this->parseFuncIRI(firi)) {
         parsedValue = true;
+    } else if (this->parseExpectedStringToken("drop-shadow") &&
+               this->parseExpectedStringToken("(")) {
+        const char* argumentStart = fCurPos;
+        int depth = 1;
+        while (fCurPos < fEndPos && depth > 0) {
+            if (*fCurPos == '(') {
+                ++depth;
+            } else if (*fCurPos == ')') {
+                --depth;
+            }
+            ++fCurPos;
+        }
+        if (depth == 0) {
+            SkSVGDropShadow shadow;
+            const SkString arguments(argumentStart, (fCurPos - 1) - argumentStart);
+            if (parse_drop_shadow_arguments(arguments, &shadow)) {
+                *firi = SkSVGFuncIRI(shadow);
+                parsedValue = true;
+            }
+        }
     }
 
     return parsedValue && this->parseEOSToken();
@@ -1077,6 +1270,40 @@ bool SkSVGAttributeParser::parse(SkSVGTextAnchor* anchor) {
     return parsedValue && this->parseEOSToken();
 }
 
+// https://www.w3.org/TR/SVG11/text.html#TextDecorationProperty
+template <>
+bool SkSVGAttributeParser::parse(SkSVGTextDecoration* decoration) {
+    if (this->parseExpectedStringToken("none")) {
+        *decoration = SkSVGTextDecoration();
+        return this->parseEOSToken();
+    }
+
+    uint8_t types = SkSVGTextDecoration::kNone;
+    for (;;) {
+        if (this->parseExpectedStringToken("underline")) {
+            types |= SkSVGTextDecoration::kUnderline;
+        } else if (this->parseExpectedStringToken("overline")) {
+            types |= SkSVGTextDecoration::kOverline;
+        } else if (this->parseExpectedStringToken("line-through")) {
+            types |= SkSVGTextDecoration::kLineThrough;
+        } else if (!this->parseExpectedStringToken("blink")) {
+            return false;
+        }
+
+        if (this->parseEOSToken()) {
+            *decoration = SkSVGTextDecoration(types);
+            return true;
+        }
+        if (!this->parseWSToken()) {
+            return false;
+        }
+        if (this->parseEOSToken()) {
+            *decoration = SkSVGTextDecoration(types);
+            return true;
+        }
+    }
+}
+
 // https://www.w3.org/TR/SVG11/coords.html#PreserveAspectRatioAttribute
 bool SkSVGAttributeParser::parsePreserveAspectRatio(SkSVGPreserveAspectRatio* par) {
     static constexpr std::tuple<const char*, SkSVGPreserveAspectRatio::Align> gAlignMap[] = {
@@ -1167,6 +1394,9 @@ bool SkSVGAttributeParser::parse(SkSVGDisplay* display) {
         const char*  fName;
     } gDisplayInfo[] = {
         { SkSVGDisplay::kInline, "inline" },
+        // Browser computed styles commonly serialize the outer <svg> as display:block, which is
+        // equivalent to inline for the static SVG rendering decision made by SkSVGNode.
+        { SkSVGDisplay::kInline, "block"  },
         { SkSVGDisplay::kNone  , "none"   },
     };
 
@@ -1180,4 +1410,19 @@ bool SkSVGAttributeParser::parse(SkSVGDisplay* display) {
     }
 
     return parsedValue && this->parseEOSToken();
+}
+
+template <>
+bool SkSVGAttributeParser::parse(SkSVGOverflow* overflow) {
+    if (this->parseExpectedStringToken("visible")) {
+        *overflow = SkSVGOverflow::kVisible;
+    } else if (this->parseExpectedStringToken("hidden") ||
+               this->parseExpectedStringToken("clip") ||
+               this->parseExpectedStringToken("auto") ||
+               this->parseExpectedStringToken("scroll")) {
+        *overflow = SkSVGOverflow::kClip;
+    } else {
+        return false;
+    }
+    return this->parseEOSToken();
 }

@@ -50,6 +50,7 @@ enum class SkSVGAttribute {
     kTransform,
     kText,
     kTextAnchor,
+    kTextDecoration,
     kViewBox,
     kVisibility,
     kWidth,
@@ -82,6 +83,10 @@ struct SkSVGPresentationAttributes {
     SkSVGProperty<SkSVGNumberType, true> fStrokeOpacity;
     SkSVGProperty<SkSVGLength    , true> fStrokeWidth;
 
+    SkSVGProperty<SkSVGFuncIRI   , true> fMarkerStart;
+    SkSVGProperty<SkSVGFuncIRI   , true> fMarkerMid;
+    SkSVGProperty<SkSVGFuncIRI   , true> fMarkerEnd;
+
     SkSVGProperty<SkSVGVisibility, true> fVisibility;
 
     SkSVGProperty<SkSVGColorType , true> fColor;
@@ -93,6 +98,7 @@ struct SkSVGPresentationAttributes {
     SkSVGProperty<SkSVGFontSize  , true> fFontSize;
     SkSVGProperty<SkSVGFontWeight, true> fFontWeight;
     SkSVGProperty<SkSVGTextAnchor, true> fTextAnchor;
+    SkSVGProperty<SkSVGTextDecoration, true> fTextDecoration;
 
     // uninherited
     SkSVGProperty<SkSVGNumberType, false> fOpacity;

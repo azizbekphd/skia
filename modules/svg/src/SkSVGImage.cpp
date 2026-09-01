@@ -26,6 +26,7 @@ bool SkSVGImage::parseAndSetAttribute(const char* n, const char* v) {
            this->setY(SkSVGAttributeParser::parse<SkSVGLength>("y", n, v)) ||
            this->setWidth(SkSVGAttributeParser::parse<SkSVGLength>("width", n, v)) ||
            this->setHeight(SkSVGAttributeParser::parse<SkSVGLength>("height", n, v)) ||
+           this->setHref(SkSVGAttributeParser::parse<SkSVGIRI>("href", n, v)) ||
            this->setHref(SkSVGAttributeParser::parse<SkSVGIRI>("xlink:href", n, v)) ||
            this->setPreserveAspectRatio(SkSVGAttributeParser::parse<SkSVGPreserveAspectRatio>(
                    "preserveAspectRatio", n, v));

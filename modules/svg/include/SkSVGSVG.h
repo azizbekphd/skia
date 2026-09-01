@@ -34,15 +34,19 @@ public:
     SVG_ATTR(Width              , SkSVGLength, SkSVGLength(100, SkSVGLength::Unit::kPercentage))
     SVG_ATTR(Height             , SkSVGLength, SkSVGLength(100, SkSVGLength::Unit::kPercentage))
     SVG_ATTR(PreserveAspectRatio, SkSVGPreserveAspectRatio, SkSVGPreserveAspectRatio())
+    SVG_ATTR(Overflow           , SkSVGOverflow, SkSVGOverflow::kVisible)
 
     SVG_OPTIONAL_ATTR(ViewBox, SkSVGViewBoxType)
+    SVG_OPTIONAL_ATTR(BackgroundColor, SkSVGColorType)
 
     SkSize intrinsicSize(const SkSVGLengthContext&) const;
 
     void renderNode(const SkSVGRenderContext&, const SkSVGIRI& iri) const;
 
 protected:
+    bool parseAndSetAttribute(const char*, const char*) override;
     bool onPrepareToRender(SkSVGRenderContext*) const override;
+    void onRender(const SkSVGRenderContext&) const override;
 
     void onSetAttribute(SkSVGAttribute, const SkSVGValue&) override;
 

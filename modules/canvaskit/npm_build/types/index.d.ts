@@ -480,6 +480,7 @@ export interface CanvasKit {
     readonly MaskFilter: MaskFilterFactory;
     readonly PathEffect: PathEffectFactory;
     readonly RuntimeEffect: RuntimeEffectFactory;
+    readonly SVGDOM: SVGDOMFactory;
     readonly Shader: ShaderFactory;
     readonly TextBlob: TextBlobFactory;
     readonly Typeface: TypefaceFactory;
@@ -2098,6 +2099,23 @@ export interface FontMgr extends EmbindObject<"FontMgr"> {
     matchFamilyStyle(name: string, style: FontStyle): Typeface;
 }
 
+export interface SVGLogger {
+    onWarning?(message: string): void;
+    onError?(message: string): void;
+}
+
+/** A parsed SVG document that can render to raster, GPU, picture, or PDF canvases. */
+export interface SVGDOM extends EmbindObject<"SVGDOM"> {
+    /** Changes the viewport used to resolve the root SVG dimensions. */
+    setContainerSize(width: number, height: number): void;
+
+    /** Preloads resources and returns false when vector rendering would be incomplete. */
+    validate(): boolean;
+
+    /** Validates, then draws without modifying canvas when validation fails. */
+    render(canvas: Canvas): boolean;
+}
+
 /**
  * See SkImage.h for more information on this class.
  */
@@ -3709,6 +3727,15 @@ export interface FontMgrFactory {
      * @param buffers
      */
     FromData(...buffers: ArrayBuffer[]): FontMgr | null;
+}
+
+export interface SVGDOMFactory {
+    /**
+     * Parses normalized SVG. CSS stylesheets and switch elements must be resolved by the caller.
+     * External resources are rejected; embedded images must use data URIs.
+     */
+    MakeFromString(svg: string, fontMgr?: FontMgr | null,
+                   logger?: SVGLogger | null): SVGDOM | null;
 }
 
 /**

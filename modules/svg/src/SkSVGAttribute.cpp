@@ -25,6 +25,9 @@ SkSVGPresentationAttributes SkSVGPresentationAttributes::MakeInitial() {
     result.fStrokeMiterLimit.set(SkSVGNumberType(4));
     result.fStrokeOpacity.set(SkSVGNumberType(1));
     result.fStrokeWidth.set(SkSVGLength(1));
+    result.fMarkerStart.set(SkSVGFuncIRI());
+    result.fMarkerMid.set(SkSVGFuncIRI());
+    result.fMarkerEnd.set(SkSVGFuncIRI());
 
     result.fVisibility.set(SkSVGVisibility(SkSVGVisibility::Type::kVisible));
 
@@ -37,6 +40,7 @@ SkSVGPresentationAttributes SkSVGPresentationAttributes::MakeInitial() {
     result.fFontSize.init(SkSVGLength(24));
     result.fFontWeight.init(SkSVGFontWeight::Type::kNormal);
     result.fTextAnchor.init(SkSVGTextAnchor::Type::kStart);
+    result.fTextDecoration.init();
 
     result.fDisplay.init(SkSVGDisplay::kInline);
 

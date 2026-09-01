@@ -131,6 +131,7 @@ private:
     bool parseColorComponentFractionalToken(int32_t*);
     bool parseColorComponentToken(int32_t*);
     bool parseColorToken(SkColor*);
+    bool parseHSLColorToken(SkColor*, const char* functionName, bool alphaRequired);
     bool parseRGBColorToken(SkColor*);
     bool parseRGBAColorToken(SkColor*);
     bool parseSVGColor(SkSVGColor*, SkSVGColor::Vars&&);

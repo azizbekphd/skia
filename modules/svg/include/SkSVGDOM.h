@@ -24,6 +24,15 @@ struct SkSVGPresentationContext;
 
 class SK_API SkSVGDOM : public SkRefCnt {
 public:
+    class Logger : public SkRefCnt {
+    public:
+        enum class Level { kWarning, kError };
+        virtual void log(Level, const char message[]) = 0;
+
+    protected:
+        ~Logger() override = default;
+    };
+
     class Builder final {
     public:
         /**
@@ -45,12 +54,16 @@ public:
          */
         Builder& setTextShapingFactory(sk_sp<SkShapers::Factory>);
 
+        /** Receive parse errors and unsupported-feature warnings. */
+        Builder& setLogger(sk_sp<Logger>);
+
         sk_sp<SkSVGDOM> make(SkStream&) const;
 
     private:
         sk_sp<SkFontMgr>                             fFontMgr;
         sk_sp<skresources::ResourceProvider>         fResourceProvider;
         sk_sp<SkShapers::Factory>                    fTextShapingFactory;
+        sk_sp<Logger>                                fLogger;
     };
 
     static sk_sp<SkSVGDOM> MakeFromStream(SkStream& str);

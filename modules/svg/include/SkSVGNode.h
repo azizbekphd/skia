@@ -36,6 +36,7 @@ enum class SkSVGTag {
     kFeDiffuseLighting,
     kFeDisplacementMap,
     kFeDistantLight,
+    kFeDropShadow,
     kFeFlood,
     kFeFuncA,
     kFeFuncR,
@@ -56,6 +57,7 @@ enum class SkSVGTag {
     kImage,
     kLine,
     kLinearGradient,
+    kMarker,
     kMask,
     kPath,
     kPattern,
@@ -64,6 +66,7 @@ enum class SkSVGTag {
     kRadialGradient,
     kRect,
     kStop,
+    kSymbol,
     kSvg,
     kText,
     kTextLiteral,
@@ -142,7 +145,11 @@ public:
     SVG_PRES_ATTR(StrokeMiterLimit         , SkSVGNumberType, true)
     SVG_PRES_ATTR(StrokeOpacity            , SkSVGNumberType, true)
     SVG_PRES_ATTR(StrokeWidth              , SkSVGLength    , true)
+    SVG_PRES_ATTR(MarkerStart              , SkSVGFuncIRI   , true)
+    SVG_PRES_ATTR(MarkerMid                , SkSVGFuncIRI   , true)
+    SVG_PRES_ATTR(MarkerEnd                , SkSVGFuncIRI   , true)
     SVG_PRES_ATTR(TextAnchor               , SkSVGTextAnchor, true)
+    SVG_PRES_ATTR(TextDecoration           , SkSVGTextDecoration, true)
     SVG_PRES_ATTR(Visibility               , SkSVGVisibility, true)
 
     // not inherited

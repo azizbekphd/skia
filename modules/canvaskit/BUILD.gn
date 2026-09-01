@@ -118,6 +118,12 @@ skia_wasm_lib("canvaskit") {
   if (skia_canvaskit_enable_embedded_font) {
     deps += [ ":create_notomono_cpp" ]
   }
+  if (skia_canvaskit_enable_svg) {
+    deps += [
+      "../../modules/skresources:skresources",
+      "../../modules/svg:svg",
+    ]
+  }
 
   sources = [
     "WasmCommon.h",
@@ -158,6 +164,9 @@ skia_wasm_lib("canvaskit") {
   }
   if (skia_canvaskit_enable_rt_shader) {
     sources += [ "../../tools/sksltrace/SkSLTraceUtils.cpp" ]
+  }
+  if (skia_canvaskit_enable_svg) {
+    sources += [ "svg_bindings.cpp" ]
   }
 
   ldflags = []
@@ -238,6 +247,12 @@ skia_wasm_lib("canvaskit") {
     "--pre-js",
     rebase_path("interface.js"),
   ]
+  if (skia_canvaskit_enable_svg) {
+    ldflags += [
+      "--pre-js",
+      rebase_path("svg.js"),
+    ]
+  }
 
   if (skia_canvaskit_enable_matrix_helper) {
     ldflags += [
@@ -353,7 +368,8 @@ skia_wasm_lib("canvaskit") {
 
     # INCOMING_MODULE_JS_API is set to empty by default.
     # https://github.com/emscripten-core/emscripten/blob/8dc91db45bf96c174531006839472a3924d105aa/src/settings.js#L1204
-    "-sINCOMING_MODULE_JS_API=onRuntimeInitialized",
+    # Keep this synchronized with the public CanvasKitInitOptions declaration.
+    "-sINCOMING_MODULE_JS_API=instantiateWasm,locateFile,onRuntimeInitialized",
   ]
 
   defines = [
@@ -371,6 +387,9 @@ skia_wasm_lib("canvaskit") {
   }
   if (skia_canvaskit_enable_embedded_font) {
     defines += [ "CK_EMBED_FONT" ]
+  }
+  if (skia_canvaskit_enable_svg) {
+    defines += [ "CK_INCLUDE_SVG" ]
   }
   if (skia_use_icu && skia_use_harfbuzz) {
     deps += [

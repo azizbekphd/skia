@@ -32,6 +32,8 @@ protected:
 
     void mapToParent(SkPath*) const;
 
+    bool mapToLocal(SkPath*) const;
+
     void mapToParent(SkRect*) const;
 
     SkRect onObjectBoundingBox(const SkSVGRenderContext& ) const final;

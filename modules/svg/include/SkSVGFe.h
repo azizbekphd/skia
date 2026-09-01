@@ -32,6 +32,7 @@ public:
             case SkSVGTag::kFeComposite:
             case SkSVGTag::kFeDiffuseLighting:
             case SkSVGTag::kFeDisplacementMap:
+            case SkSVGTag::kFeDropShadow:
             case SkSVGTag::kFeFlood:
             case SkSVGTag::kFeGaussianBlur:
             case SkSVGTag::kFeImage:

@@ -18,6 +18,7 @@
 #include "include/private/base/SkTArray.h"
 #include "include/private/base/SkTo.h"
 #include "modules/skshaper/include/SkShaper.h"
+#include "modules/svg/include/SkSVGTypes.h"
 #include "src/base/SkTLazy.h"
 
 #include <cstddef>
@@ -52,7 +53,8 @@ public:
     using ShapedTextCallback = std::function<void(const SkSVGRenderContext&,
                                                   const sk_sp<SkTextBlob>&,
                                                   const SkPaint*,
-                                                  const SkPaint*)>;
+                                                  const SkPaint*,
+                                                  const SkSVGTextDecoration&)>;
 
     // Helper for encoding optional positional attributes.
     class PosAttrs {
@@ -98,10 +100,10 @@ public:
     // [1] https://www.w3.org/TR/SVG11/text.html#TSpanElementXAttribute
     class ScopedPosResolver {
     public:
-        ScopedPosResolver(const SkSVGTextContainer&, const SkSVGLengthContext&, SkSVGTextContext*,
+        ScopedPosResolver(const SkSVGTextContainer&, const SkSVGRenderContext&, SkSVGTextContext*,
                           size_t);
 
-        ScopedPosResolver(const SkSVGTextContainer&, const SkSVGLengthContext&, SkSVGTextContext*);
+        ScopedPosResolver(const SkSVGTextContainer&, const SkSVGRenderContext&, SkSVGTextContext*);
 
         ~ScopedPosResolver();
 
@@ -122,9 +124,25 @@ public:
 
     };
 
+    class ScopedTextLayout {
+    public:
+        ScopedTextLayout(const SkSVGTextContainer&,
+                         const SkSVGRenderContext&,
+                         SkSVGTextContext*);
+        ~ScopedTextLayout();
+
+    private:
+        SkSVGTextContext*       fTextContext;
+        const SkSVGRenderContext& fRenderContext;
+        float                   fPreviousBaselineOffset;
+        float                   fPreviousTextLength;
+        bool                    fHasTextLength;
+    };
+
     SkSVGTextContext(const SkSVGRenderContext&,
                      const ShapedTextCallback&,
-                     const SkSVGTextPath* = nullptr);
+                     const SkSVGTextPath* = nullptr,
+                     float inheritedBaselineOffset = 0);
     ~SkSVGTextContext() override;
 
     // Shape and queue codepoints for final alignment.
@@ -134,11 +152,13 @@ public:
     void flushChunk(const SkSVGRenderContext& ctx);
 
     const ShapedTextCallback& getCallback() const { return fCallback; }
+    float baselineOffset() const { return fBaselineOffset; }
 
 private:
     struct PositionAdjustment {
         SkVector offset;
         float    rotation;
+        float    baselineOffset;
     };
 
     struct ShapeBuffer {
@@ -163,9 +183,12 @@ private:
         SkFont                                font;
         std::unique_ptr<SkPaint>              fillPaint,
                                               strokePaint;
+        SkSVGTextDecoration                   textDecoration;
         std::unique_ptr<SkGlyphID[]>          glyphs;        // filled by SkShaper
         std::unique_ptr<SkPoint[]>            glyphPos;      // filled by SkShaper
+        std::unique_ptr<uint32_t[]>           clusters;      // UTF-8 cluster for each glyph
         std::unique_ptr<PositionAdjustment[]> glyhPosAdjust; // deferred positioning adjustments
+        size_t                                shapeBatch;
         size_t                                glyphCount;
         SkVector                              advance;
     };
@@ -207,12 +230,15 @@ private:
 
     // shaper state
     ShapeBuffer                     fShapeBuffer;
-    std::vector<uint32_t>           fShapeClusterBuffer;
+    std::vector<uint32_t>           fShapeGraphemeMap;
+    size_t                          fShapeBatch = 0;
 
     // chunk state
     SkPoint                         fChunkPos     = {0,0}; // current text chunk position
     SkVector                        fChunkAdvance = {0,0}; // cumulative advance
     float                           fChunkAlignmentFactor; // current chunk alignment
+    float                           fTextLength = -1;       // requested chunk length, if any
+    float                           fBaselineOffset = 0;    // alphabetic baseline adjustment
 
     // tracks the global text subtree char index (cross chunks).  Used for position resolution.
     size_t                          fCurrentCharIndex = 0;
@@ -220,6 +246,7 @@ private:
     // cached for access from SkShaper callbacks.
     SkTLazy<SkPaint>                fCurrentFill;
     SkTLazy<SkPaint>                fCurrentStroke;
+    SkSVGTextDecoration             fCurrentTextDecoration;
 
     bool                            fPrevCharSpace = true; // WS filter state
     bool                            fForcePrimitiveShaping = false;
