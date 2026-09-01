@@ -141,6 +141,7 @@ function canvasTests(CK: CanvasKit, canvas?: Canvas, paint?: Paint, path?: Path,
     canvas.drawPicture(skp);
     canvas.drawPoints(CK.PointMode.Lines, [1, 2, 3, 4, 5, 6], paint);
     canvas.drawRect(someRect, paint);
+    canvas.drawUrlAnnotation(someRect, 'https://example.com/canvaskit');
     canvas.drawRect4f(5, 6, 7, 8, paint);
     canvas.drawRRect(someRRect, paint);
     canvas.drawShadow(path, [1, 2, 3], [4, 5, 6], 7, someColor, CK.BLUE, 0);

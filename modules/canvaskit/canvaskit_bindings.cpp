@@ -65,6 +65,7 @@
 #include "include/utils/SkParsePath.h"
 #include "include/utils/SkShadowUtils.h"
 #include "src/base/SkFloatBits.h"
+#include "src/core/SkAnnotationKeys.h"
 #include "src/core/SkPathPriv.h"
 #include "src/core/SkResourceCache.h"
 #include "src/image/SkImage_Base.h"
@@ -1496,6 +1497,16 @@ EMSCRIPTEN_BINDINGS(Skia) {
             const SkRect* rect = reinterpret_cast<const SkRect*>(fPtr);
             self.drawRect(*rect, paint);
         }))
+        .function("_drawUrlAnnotation", optional_override([](SkCanvas& self,
+                                                             WASMPointerF32 fPtr,
+                                                             const std::string& url)->void {
+            const SkRect* rect = reinterpret_cast<const SkRect*>(fPtr);
+            // This Skia revision's PDF backend requires string annotation data to include its
+            // trailing null byte. MakeWithCopy gives the canvas an owned UTF-8 payload that
+            // remains valid after this binding returns.
+            sk_sp<SkData> urlData = SkData::MakeWithCopy(url.c_str(), url.size() + 1);
+            self.drawAnnotation(*rect, SkAnnotationKeys::URL_Key(), urlData);
+        }))
         .function("_drawRect4f", optional_override([](SkCanvas& self, SkScalar left, SkScalar top,
                                                      SkScalar right, SkScalar bottom,
                                                      const SkPaint& paint)->void {
@@ -2850,4 +2861,3 @@ EMSCRIPTEN_BINDINGS(Skia) {
     constant("_GlyphRunFlags_isWhiteSpace", (int)skia::textlayout::Paragraph::kWhiteSpace_VisitorFlag);
 #endif
 }
-

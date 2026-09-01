@@ -1664,6 +1664,15 @@ export interface Canvas extends EmbindObject<"Canvas"> {
     drawRect(rect: InputRect, paint: Paint): void;
 
     /**
+     * Associates the given rectangle with a URL annotation. PDF canvases emit a clickable URI
+     * link; canvas backends that do not consume annotations ignore it. The current matrix and clip
+     * are applied by Skia.
+     * @param rect
+     * @param url - URL string passed to Skia as UTF-8
+     */
+    drawUrlAnnotation(rect: InputRect, url: string): void;
+
+    /**
      * Draws the given rectangle using the current clip, current matrix, and the provided paint.
      * @param left
      * @param top

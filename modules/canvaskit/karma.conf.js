@@ -13,6 +13,7 @@ module.exports = function(config) {
     files: [
       { pattern: 'build/canvaskit.wasm', included:false, served:true},
       { pattern: 'tests/assets/*', included:false, served:true},
+      { pattern: 'node_modules/pdf-lib/dist/pdf-lib.js', included:true, served:true, watched:false},
       'build/canvaskit.js',
       'tests/legacy_init.js',
       'tests/util.js',

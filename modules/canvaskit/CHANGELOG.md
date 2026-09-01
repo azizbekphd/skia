@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+ - `Canvas.drawUrlAnnotation(rect, url)` for clickable URI regions in PDF output.
  - Optional SVG DOM support for rendering normalized SVG directly to any CanvasKit canvas,
    including PDF canvases. The API includes compatibility validation, data-URI images, and
    SVG marker rendering. The supported normalized subset includes generated percentage-based HSL

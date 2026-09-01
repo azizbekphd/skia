@@ -725,6 +725,12 @@ CanvasKit.onRuntimeInitialized = function() {
     this._drawRect(rPtr, paint);
   };
 
+  CanvasKit.Canvas.prototype.drawUrlAnnotation = function(rect, url) {
+    CanvasKit.setCurrentContext(this._context);
+    var rPtr = copyRectToWasm(rect);
+    this._drawUrlAnnotation(rPtr, url);
+  };
+
   CanvasKit.Canvas.prototype.drawRect4f = function(l, t, r, b, paint) {
     CanvasKit.setCurrentContext(this._context);
     this._drawRect4f(l, t, r, b, paint);
